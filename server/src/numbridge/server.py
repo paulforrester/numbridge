@@ -43,6 +43,21 @@ def list_sheets(document: str) -> list[str]:
 
 
 @mcp.tool()
+def list_tables(document: str, sheet: str) -> list[str]:
+    """Return the names of all tables in a sheet.
+
+    Numbers sheets can contain multiple tables. Use the returned names when
+    calling get_cell, get_range, set_cell, set_range, or get_sheet_as_table
+    to target a specific table.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+    """
+    return numbers_bridge.list_tables(document, sheet)
+
+
+@mcp.tool()
 def get_range(
     document: str,
     sheet: str,

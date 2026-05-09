@@ -82,6 +82,7 @@ uv run pytest
 |------|-----------|-------|
 | `list_documents` | `() → list[str]` | Names of all open Numbers documents |
 | `list_sheets` | `(document) → list[str]` | Sheet names in a document |
+| `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
 | `get_cell` | `(document, sheet, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
 | `get_range` | `(document, sheet, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
 | `set_cell` | `(document, sheet, row, column, value) → None` | Write one cell; `None`/`""` clears |

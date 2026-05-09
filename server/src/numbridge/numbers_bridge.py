@@ -112,6 +112,27 @@ def list_sheets(document: str) -> list[str]:
     return _as_list(raw)
 
 
+def list_tables(document: str, sheet: str) -> list[str]:
+    """Return the names of all tables in *sheet*."""
+    doc = _q(document)
+    sht = _q(sheet)
+    raw = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f"            set out to {{}}\n"
+        f"            repeat with t in tables\n"
+        f"                set end of out to (name of t)\n"
+        f"            end repeat\n"
+        f"            set AppleScript's text item delimiters to linefeed\n"
+        f"            return out as text\n"
+        f"        end tell\n"
+        f"    end tell\n"
+        f"end tell"
+    )
+    return _as_list(raw)
+
+
 def get_cell(document: str, sheet: str, row: int, column: int) -> str:
     """Return the displayed value of a cell as a string.
 
