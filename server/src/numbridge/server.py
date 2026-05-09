@@ -43,6 +43,34 @@ def list_sheets(document: str) -> list[str]:
 
 
 @mcp.tool()
+def get_range(
+    document: str,
+    sheet: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> list[list[str]]:
+    """Read a rectangular block of cells in one call.
+
+    Returns a list of rows, each row a list of displayed cell values.
+    Empty cells are "". Indices are 1-based (start_row=1, start_col=1 is A1).
+    Limited to 1 000 cells per call; use multiple calls for larger ranges.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        start_row: First row to include (1-indexed).
+        start_col: First column to include (1-indexed).
+        end_row: Last row to include (inclusive).
+        end_col: Last column to include (inclusive).
+    """
+    return numbers_bridge.get_range(
+        document, sheet, start_row, start_col, end_row, end_col
+    )
+
+
+@mcp.tool()
 def get_cell(document: str, sheet: str, row: int, column: int) -> str:
     """Read the value of a single cell from a Numbers spreadsheet.
 

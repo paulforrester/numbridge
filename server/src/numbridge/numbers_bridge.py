@@ -5,7 +5,9 @@ on any AppleScript error (Numbers not running, document not found, etc.).
 """
 import subprocess
 
-_TIMEOUT = 10  # seconds per osascript call
+_TIMEOUT = 10        # seconds — single-cell / list calls
+_RANGE_TIMEOUT = 30  # seconds — grid reads (budget ~10 ms/cell)
+_RANGE_CELL_LIMIT = 1000
 
 
 class NumbersError(RuntimeError):
@@ -33,6 +35,11 @@ def _run(script: str) -> str:
 def _as_list(raw: str) -> list[str]:
     """Split linefeed-delimited AppleScript list output into a Python list."""
     return [item for item in raw.split("\n") if item]
+
+
+def _parse_grid(raw: str) -> list[list[str]]:
+    """Parse tab+newline-delimited grid output into a list-of-rows."""
+    return [line.split("\t") for line in raw.split("\n") if line]
 
 
 def _q(s: str) -> str:
@@ -94,7 +101,7 @@ def get_cell(document: str, sheet: str, row: int, column: int) -> str:
     Row and column are 1-indexed.
     """
     doc = _q(document)
-    sht = _q(sheet)
+    sht  = _q(sheet)
     addr = f"{_col_letter(column)}{row}"
     raw = _run(
         f'tell application "Numbers"\n'
@@ -112,3 +119,76 @@ def get_cell(document: str, sheet: str, row: int, column: int) -> str:
         f"end tell"
     )
     return raw
+
+
+def get_range(
+    document: str,
+    sheet: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> list[list[str]]:
+    """Return a rectangular block of cells as a list-of-rows.
+
+    Each row is a list of displayed cell values (same format as get_cell).
+    Empty cells are represented as empty strings.  Row and column indices
+    are 1-indexed.
+
+    Raises ValueError if the range is inverted or exceeds 1 000 cells.
+    """
+    if start_row > end_row or start_col > end_col:
+        raise ValueError(
+            f"Range bounds inverted: rows {start_row}–{end_row}, cols {start_col}–{end_col}"
+        )
+    n_cells = (end_row - start_row + 1) * (end_col - start_col + 1)
+    if n_cells > _RANGE_CELL_LIMIT:
+        raise ValueError(
+            f"Range covers {n_cells} cells; limit is {_RANGE_CELL_LIMIT}. "
+            "Use multiple smaller calls."
+        )
+
+    doc = _q(document)
+    sht = _q(sheet)
+
+    # Critical: collect all rows into a list-of-lists first, THEN join with
+    # text item delimiters.  Setting the delimiter inside the row loop corrupts
+    # string accumulation in the outer loop (AppleScript scoping quirk).
+    script = f"""tell application "Numbers"
+    tell document "{doc}"
+        tell sheet "{sht}"
+            tell table 1
+                set all_rows to {{}}
+                repeat with r from {start_row} to {end_row}
+                    set row_vals to {{}}
+                    repeat with c from {start_col} to {end_col}
+                        set fv to formatted value of cell c of row r
+                        if fv is missing value then
+                            set end of row_vals to ""
+                        else
+                            set end of row_vals to fv
+                        end if
+                    end repeat
+                    set end of all_rows to row_vals
+                end repeat
+                set AppleScript's text item delimiters to tab
+                set result to ""
+                repeat with row_vals in all_rows
+                    set result to result & (row_vals as text) & linefeed
+                end repeat
+                return result
+            end tell
+        end tell
+    end tell
+end tell"""
+
+    raw = subprocess.run(
+        ["osascript", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=_RANGE_TIMEOUT,
+    )
+    if raw.returncode != 0:
+        msg = raw.stderr.strip()
+        raise NumbersError(msg or f"osascript exited with code {raw.returncode}")
+    return _parse_grid(raw.stdout.strip())
