@@ -17,7 +17,8 @@ class ServerManager: ObservableObject {
 
     private var process: Process?
     private var restartTask: Task<Void, Never>?
-    private var healthCheckTask: Task<Void, Never>?
+    /// Covers port-clearing → process spawn → HTTP readiness polling as one unit.
+    private var launchTask: Task<Void, Never>?
     private var shouldAutoRestart = false
 
     /// Port the Python server listens on. Override with NUMBRIDGE_PORT env var.
@@ -39,15 +40,13 @@ class ServerManager: ObservableObject {
         guard case .stopped = status else { return }
         shouldAutoRestart = true
         status = .starting
-        launch()
+        beginLaunch()
     }
 
     func stop() {
         shouldAutoRestart = false
-        restartTask?.cancel()
-        restartTask = nil
-        healthCheckTask?.cancel()
-        healthCheckTask = nil
+        restartTask?.cancel(); restartTask = nil
+        launchTask?.cancel();  launchTask  = nil
 
         guard let proc = process, proc.isRunning else {
             process = nil
@@ -55,7 +54,6 @@ class ServerManager: ObservableObject {
             return
         }
 
-        // Clear before terminate so terminationHandler won't schedule a restart
         process = nil
         proc.terminate()
 
@@ -67,49 +65,94 @@ class ServerManager: ObservableObject {
         status = .stopped
     }
 
-    // MARK: - Private
+    // MARK: - Launch pipeline
 
-    private func launch() {
+    /// Single task that: clears any stale port holder → spawns → polls readiness.
+    private func beginLaunch() {
         guard let serverDir = resolveServerDir() else {
             status = .error("Server directory not found — set NUMBRIDGE_SERVER_DIR")
-            log.error("Could not locate server directory")
             return
         }
-
         guard let uv = findUV() else {
             status = .error("'uv' not found — install from https://docs.astral.sh/uv/")
-            log.error("uv executable not found")
             return
         }
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: uv)
-        proc.arguments = ["run", "python", "-m", "numbridge"]
-        proc.currentDirectoryURL = serverDir
-        proc.environment = enrichedEnvironment()
+        let port = self.port
 
-        redirectOutput(proc)
+        launchTask?.cancel()
+        launchTask = Task {
+            // Step 1 — kill any orphaned server still holding our port
+            // (happens when the launcher app is force-quit leaving uvicorn running)
+            let stale = await Task.detached(priority: .utility) {
+                Self.pidsListeningOnPort(port)
+            }.value
 
-        proc.terminationHandler = { [weak self] p in
-            Task { @MainActor [weak self] in
-                self?.handleExit(code: p.terminationStatus)
+            if !stale.isEmpty {
+                self.log.info("Clearing stale server on port \(port), PIDs: \(stale)")
+                stale.forEach { kill($0, SIGTERM) }
+                try? await Task.sleep(for: .seconds(1))
+                stale.forEach { kill($0, SIGKILL) }          // force-kill survivors
+                try? await Task.sleep(for: .milliseconds(300)) // let the OS free the port
             }
-        }
 
-        do {
-            try proc.run()
-            process = proc
-            log.info("Server process started (PID \(proc.processIdentifier), port \(self.port))")
-            beginHealthCheck(pid: proc.processIdentifier)
-        } catch {
-            status = .error(error.localizedDescription)
-            log.error("Failed to launch: \(error)")
+            guard !Task.isCancelled else { return }
+
+            // Step 2 — spawn the server process
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: uv)
+            proc.arguments = ["run", "python", "-m", "numbridge"]
+            proc.currentDirectoryURL = serverDir
+            proc.environment = self.enrichedEnvironment()
+            self.redirectOutput(proc)
+
+            proc.terminationHandler = { [weak self] p in
+                Task { @MainActor [weak self] in
+                    self?.handleExit(code: p.terminationStatus)
+                }
+            }
+
+            do {
+                try proc.run()
+            } catch {
+                self.status = .error(error.localizedDescription)
+                self.log.error("Failed to launch: \(error)")
+                return
+            }
+
+            self.process = proc
+            self.log.info("Server started (PID \(proc.processIdentifier), port \(port))")
+
+            guard !Task.isCancelled else { return }
+
+            // Step 3 — poll until uvicorn accepts HTTP connections
+            let url = URL(string: "http://127.0.0.1:\(port)/mcp")!
+            var request = URLRequest(url: url, timeoutInterval: 1.5)
+            request.httpMethod = "GET"
+            let session = URLSession(configuration: .ephemeral)
+
+            let deadline = ContinuousClock.now + Self.readyTimeout
+            while ContinuousClock.now < deadline {
+                try? await Task.sleep(for: Self.readyPollInterval)
+                guard !Task.isCancelled else { return }
+
+                if let _ = try? await session.data(for: request) {
+                    self.status = .running(pid: proc.processIdentifier, port: port)
+                    self.log.info("Server ready on port \(port)")
+                    return
+                }
+            }
+
+            self.log.error("Server did not become ready within 15 s")
+            self.status = .error("Did not become ready — restarting…")
+            proc.terminate()
+            self.process = nil
         }
     }
 
     private func handleExit(code: Int32) {
-        healthCheckTask?.cancel()
-        healthCheckTask = nil
+        launchTask?.cancel()
+        launchTask = nil
         process = nil
 
         guard shouldAutoRestart else {
@@ -124,40 +167,7 @@ class ServerManager: ObservableObject {
             try? await Task.sleep(for: Self.restartDelay)
             guard !Task.isCancelled else { return }
             self.status = .starting
-            self.launch()
-        }
-    }
-
-    // MARK: - HTTP readiness poll
-
-    /// Polls GET /mcp until any HTTP response arrives (even 406 = server up) or timeout.
-    private func beginHealthCheck(pid: Int32) {
-        let port = self.port
-        let url = URL(string: "http://127.0.0.1:\(port)/mcp")!
-        var request = URLRequest(url: url, timeoutInterval: 1.5)
-        request.httpMethod = "GET"
-
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 1.5
-        let session = URLSession(configuration: config)
-
-        healthCheckTask = Task {
-            let deadline = ContinuousClock.now + Self.readyTimeout
-            while ContinuousClock.now < deadline {
-                try? await Task.sleep(for: Self.readyPollInterval)
-                guard !Task.isCancelled else { return }
-
-                if let _ = try? await session.data(for: request) {
-                    // Any HTTP response means uvicorn is accepting connections
-                    self.status = .running(pid: pid, port: port)
-                    self.log.info("Server ready on port \(port)")
-                    return
-                }
-            }
-            // Timed out waiting for readiness — kill and let restart logic handle it
-            self.log.error("Server readiness timeout after 15s")
-            self.status = .error("Did not become ready — restarting…")
-            self.process?.terminate()
+            self.beginLaunch()
         }
     }
 
@@ -182,7 +192,8 @@ class ServerManager: ObservableObject {
         return nil
     }
 
-    /// Ordered search: user-local installs first, then system Homebrew paths.
+    /// Ordered search: user-local installs first, then system paths.
+    /// Explicit paths required because macOS GUI apps don't inherit the shell PATH.
     private func findUV() -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [
@@ -213,7 +224,8 @@ class ServerManager: ObservableObject {
 
     private func enrichedEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "\(FileManager.default.homeDirectoryForCurrentUser.path)/.local/bin:/opt/homebrew/bin:/usr/local/bin:\(env["PATH"] ?? "/usr/bin:/bin")"
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        env["PATH"] = "\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:\(env["PATH"] ?? "/usr/bin:/bin")"
         env["NUMBRIDGE_PORT"] = String(port)
         return env
     }
@@ -233,5 +245,25 @@ class ServerManager: ObservableObject {
         else { return nil }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("server.log")
+    }
+
+    // MARK: - Port utilities (nonisolated — safe to call from background threads)
+
+    /// Returns PIDs of all processes with a TCP LISTEN socket on `port`.
+    /// Runs synchronously; call from a background thread or detached Task.
+    nonisolated private static func pidsListeningOnPort(_ port: Int) -> [Int32] {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        proc.arguments = ["-t", "-i", "TCP:\(port)", "-sTCP:LISTEN"]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        guard (try? proc.run()) != nil else { return [] }
+        proc.waitUntilExit()
+        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return out
+            .components(separatedBy: .newlines)
+            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+            .filter { $0 > 0 }
     }
 }
