@@ -135,6 +135,22 @@ def set_range(
     numbers_bridge.set_range(document, sheet, start_row, start_col, values)
 
 
+@mcp.tool()
+def get_sheet_as_table(document: str, sheet: str) -> list[list[str]]:
+    """Read all used cells in a sheet and return them as a list of rows.
+
+    Automatically detects the used range by backward-scanning the table, then
+    reads the entire block in one call.  Returns an empty list if the sheet is
+    empty.  Limited to 2 000 cells; use get_range for targeted reads of large
+    sheets.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+    """
+    return numbers_bridge.get_sheet_as_table(document, sheet)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------

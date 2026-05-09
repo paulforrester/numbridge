@@ -86,6 +86,7 @@ uv run pytest
 | `get_range` | `(document, sheet, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
 | `set_cell` | `(document, sheet, row, column, value) → None` | Write one cell; `None`/`""` clears |
 | `set_range` | `(document, sheet, start_row, start_col, values) → None` | Write a block; rows may be jagged; max 1 000 cells |
+| `get_sheet_as_table` | `(document, sheet) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
 
 All row/column indices are **1-based**. `set_range` generates one multi-statement AppleScript script so the entire write is a single `osascript` call.
 
@@ -97,7 +98,8 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `_as_value(v)` — converts a Python value to an AppleScript literal: `int`/`float` → bare number (numeric cell), `str` → quoted string (text cell), `None`/`""` → `""` (clears cell). `bool` is checked before `int` to avoid Python's bool-is-int subclass coercion.
 - `get_range` uses `formatted value` and a **collect-then-serialize** pattern: all rows are gathered into an AppleScript list-of-lists first, then serialized with tab+linefeed delimiters in a single pass *after* the loop. Setting `text item delimiters` inside the row loop corrupts the outer string accumulator (only the last row survives).
 - `get_range` uses `.rstrip("\r\n")` — not `.strip()` — on raw output. `.strip()` eats the trailing `\t` on the last row, silently dropping trailing empty cells.
-- Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes).
+- Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes), `_SHEET_TIMEOUT = 60 s` (whole-sheet scan+read).
+- `get_sheet_as_table` backward-scans `row count`/`column count` to find the last non-empty row and column, then reads the block with the same collect-then-serialize pattern. Returns `""` from AppleScript for empty sheets; returns `"OVERLIMIT:R:C"` sentinel when the used range exceeds 2 000 cells (Python raises `ValueError`).
 
 ## Key constraints
 

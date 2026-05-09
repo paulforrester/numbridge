@@ -8,6 +8,8 @@ import subprocess
 _TIMEOUT = 10        # seconds — single-cell / list calls
 _RANGE_TIMEOUT = 30  # seconds — grid reads (budget ~10 ms/cell)
 _RANGE_CELL_LIMIT = 1000
+_SHEET_TIMEOUT = 60  # seconds — whole-sheet read (scan + grid)
+_SHEET_CELL_LIMIT = 2000
 
 
 class NumbersError(RuntimeError):
@@ -298,3 +300,94 @@ def set_range(
     if result.returncode != 0:
         msg = result.stderr.strip()
         raise NumbersError(msg or f"osascript exited with code {result.returncode}")
+
+
+def get_sheet_as_table(document: str, sheet: str) -> list[list[str]]:
+    """Return all used cells in *sheet* as a list-of-rows.
+
+    Backward-scans the table dimensions to find the used range, then reads
+    the entire block in one AppleScript call.  Returns an empty list for an
+    empty sheet.
+
+    Raises ValueError if the used range exceeds 2 000 cells (use get_range
+    for targeted reads of large sheets).
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+
+    script = f"""tell application "Numbers"
+    tell document "{doc}"
+        tell sheet "{sht}"
+            tell table 1
+                set rc to row count
+                set cc to column count
+                set last_row to 0
+                repeat with r from rc to 1 by -1
+                    repeat with c from 1 to cc
+                        if value of cell c of row r is not missing value then
+                            set last_row to r
+                            exit repeat
+                        end if
+                    end repeat
+                    if last_row > 0 then exit repeat
+                end repeat
+                if last_row = 0 then return ""
+                set last_col to 0
+                repeat with c from cc to 1 by -1
+                    repeat with r from 1 to last_row
+                        if value of cell c of row r is not missing value then
+                            set last_col to c
+                            exit repeat
+                        end if
+                    end repeat
+                    if last_col > 0 then exit repeat
+                end repeat
+                if last_col = 0 then return ""
+                if (last_row * last_col) > {_SHEET_CELL_LIMIT} then
+                    return "OVERLIMIT:" & last_row & ":" & last_col
+                end if
+                set all_rows to {{}}
+                repeat with r from 1 to last_row
+                    set row_vals to {{}}
+                    repeat with c from 1 to last_col
+                        set fv to formatted value of cell c of row r
+                        if fv is missing value then
+                            set end of row_vals to ""
+                        else
+                            set end of row_vals to fv
+                        end if
+                    end repeat
+                    set end of all_rows to row_vals
+                end repeat
+                set AppleScript's text item delimiters to tab
+                set result to ""
+                repeat with row_vals in all_rows
+                    set result to result & (row_vals as text) & linefeed
+                end repeat
+                return result
+            end tell
+        end tell
+    end tell
+end tell"""
+
+    raw = subprocess.run(
+        ["osascript", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=_SHEET_TIMEOUT,
+    )
+    if raw.returncode != 0:
+        msg = raw.stderr.strip()
+        raise NumbersError(msg or f"osascript exited with code {raw.returncode}")
+
+    out = raw.stdout.strip()
+    if not out:
+        return []
+    if out.startswith("OVERLIMIT:"):
+        _, nrows, ncols = out.split(":")
+        n_cells = int(nrows) * int(ncols)
+        raise ValueError(
+            f"Sheet used range is {nrows}×{ncols} = {n_cells} cells; "
+            f"limit is {_SHEET_CELL_LIMIT}. Use get_range for targeted reads."
+        )
+    return _parse_grid(out.rstrip("\r\n"))
