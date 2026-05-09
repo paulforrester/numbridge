@@ -1,21 +1,25 @@
-"""NumBridge MCP server — stub.  AppleScript tools added in the next layer."""
-import asyncio
+"""NumBridge MCP server — HTTP daemon (streamable-http transport).
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
+Runs on 127.0.0.1:PORT (default 8765, override with NUMBRIDGE_PORT).
+Claude Desktop / Claude Code connects via http://127.0.0.1:PORT/mcp
+"""
+import os
 
-app = Server("numbridge")
+from mcp.server.fastmcp import FastMCP
+
+PORT = int(os.environ.get("NUMBRIDGE_PORT", "8765"))
+
+mcp = FastMCP(
+    "numbridge",
+    host="127.0.0.1",
+    port=PORT,
+)
 
 
-@app.list_tools()
-async def list_tools():
-    return []
+# ---------------------------------------------------------------------------
+# Numbers tools — to be implemented in numbers_bridge.py
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    asyncio.run(_run())
-
-
-async def _run() -> None:
-    async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+    mcp.run(transport="streamable-http")

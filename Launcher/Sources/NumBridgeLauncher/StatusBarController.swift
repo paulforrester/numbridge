@@ -52,8 +52,11 @@ class StatusBarController {
         menu.addItem(.separator())
 
         switch status {
-        case .running:
+        case .running(_, let port):
             menu.addItem(menuItem("Stop Server", action: #selector(stopServer)))
+            let urlItem = NSMenuItem(title: "http://127.0.0.1:\(port)/mcp", action: nil, keyEquivalent: "")
+            urlItem.isEnabled = false
+            menu.addItem(urlItem)
         case .stopped, .error:
             menu.addItem(menuItem("Start Server", action: #selector(startServer)))
         case .starting:
@@ -72,10 +75,10 @@ class StatusBarController {
 
     private func headerTitle(_ status: ServerStatus) -> String {
         switch status {
-        case .stopped:           return "NumBridge — Stopped"
-        case .starting:          return "NumBridge — Starting…"
-        case .running(let pid):  return "NumBridge — Running  (PID \(pid))"
-        case .error(let msg):    return "NumBridge — \(msg)"
+        case .stopped:                      return "NumBridge — Stopped"
+        case .starting:                     return "NumBridge — Starting…"
+        case .running(let pid, let port):   return "NumBridge — :‌\(port)  (PID \(pid))"
+        case .error(let msg):               return "NumBridge — \(msg)"
         }
     }
 

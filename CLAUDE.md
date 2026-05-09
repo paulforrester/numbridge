@@ -54,8 +54,9 @@ uv run pytest
 - `@MainActor` `ObservableObject`; all state mutations happen on the main actor.
 - Calls `uv run python -m numbridge` with `currentDirectoryURL` set to the server dir.
 - Server directory lookup order: `NUMBRIDGE_SERVER_DIR` env var → `<Bundle>/Resources/server/` → sibling `dist/server/` symlink.
-- `uv` is searched in `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin` — PATH enrichment covers Homebrew on both Apple Silicon and Intel.
-- On unexpected exit, restarts after 3 s. `stop()` sends SIGTERM, then SIGKILL after 2 s grace if still alive. `shouldAutoRestart` flag prevents restarts during intentional shutdown.
+- `uv` search order: `~/.local/bin` → `~/.cargo/bin` → `/opt/homebrew/bin` → `/usr/local/bin` → `which uv` fallback. GUI apps don't inherit shell PATH, so explicit paths are required.
+- After process launch, polls `GET http://127.0.0.1:PORT/mcp` every 400 ms (15 s timeout). Status stays `.starting` until any HTTP response arrives, then transitions to `.running(pid:port:)`.
+- On unexpected exit, restarts after 3 s. `stop()` sends SIGTERM, then SIGKILL after 2 s grace. `shouldAutoRestart` flag prevents restarts during intentional shutdown.
 - Server stdout/stderr → `~/Library/Logs/NumBridge/server.log`.
 
 ### StatusBarController (Swift)
@@ -69,9 +70,11 @@ uv run pytest
 
 `server/src/numbridge/server.py`
 
-- Uses the `mcp` SDK. Tools are registered with `@app.list_tools()` / `@app.call_tool()`.
-- Communicates over stdio (MCP standard). The launcher owns the process and does not open any sockets.
-- AppleScript calls will live in a separate `numbers_bridge.py` module and be invoked via `subprocess` + `osascript`.
+- Uses `FastMCP` (high-level API from the `mcp` SDK).
+- Transport: **streamable-http** — listens on `127.0.0.1:8765` (override with `NUMBRIDGE_PORT`).
+- MCP endpoint: `http://127.0.0.1:8765/mcp` — configure this URL in Claude Desktop / Claude Code.
+- Tools are registered with `@mcp.tool()` decorators; Numbers operations will live in `numbers_bridge.py` and be invoked via `subprocess` + `osascript`.
+- 406 on a plain `GET /mcp` is expected (correct rejection of non-MCP requests); use it as a liveness probe.
 
 ## Key constraints
 
