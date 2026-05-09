@@ -47,6 +47,23 @@ def _q(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _as_value(v: str | int | float | None) -> str:
+    """Return an AppleScript literal for *v*.
+
+    - int/float  → bare number  (stored as a Number cell)
+    - str        → quoted string (stored as text; empty string clears the cell)
+    - None       → empty string  (clears the cell)
+    Note: bool is a subclass of int in Python, so True/False become 1/0.
+    """
+    if v is None:
+        return '""'
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    return f'"{_q(str(v))}"'
+
+
 def _col_letter(n: int) -> str:
     """Convert a 1-based column index to a spreadsheet column letter (1→A, 27→AA)."""
     result = ""
@@ -191,4 +208,93 @@ end tell"""
     if raw.returncode != 0:
         msg = raw.stderr.strip()
         raise NumbersError(msg or f"osascript exited with code {raw.returncode}")
-    return _parse_grid(raw.stdout.strip())
+    # rstrip only newlines — not tabs.  .strip() would eat the trailing tab
+    # on the last row, silently dropping any trailing empty cell in that row.
+    return _parse_grid(raw.stdout.rstrip("\r\n"))
+
+
+def set_cell(
+    document: str,
+    sheet: str,
+    row: int,
+    column: int,
+    value: str | int | float | None,
+) -> None:
+    """Write a single cell value.
+
+    Pass a number (int/float) to store a numeric cell, a string for text,
+    or None / "" to clear the cell.  Row and column are 1-indexed.
+    """
+    doc  = _q(document)
+    sht  = _q(sheet)
+    addr = f"{_col_letter(column)}{row}"
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f"            tell table 1\n"
+        f'                set value of cell "{addr}" to {_as_value(value)}\n'
+        f"            end tell\n"
+        f"        end tell\n"
+        f"    end tell\n"
+        f"end tell"
+    )
+
+
+def set_range(
+    document: str,
+    sheet: str,
+    start_row: int,
+    start_col: int,
+    values: list[list[str | int | float | None]],
+) -> None:
+    """Write a rectangular block of cells in one AppleScript call.
+
+    *values* is a list of rows; each row is a list of cell values.
+    The top-left corner of the written block is (start_row, start_col).
+    Rows may be jagged — each is written independently.
+    Pass None or "" for individual cells to clear them.
+    Limited to 1 000 cells total.
+    """
+    n_cells = sum(len(row) for row in values)
+    if n_cells == 0:
+        return
+    if n_cells > _RANGE_CELL_LIMIT:
+        raise ValueError(
+            f"Range covers {n_cells} cells; limit is {_RANGE_CELL_LIMIT}. "
+            "Use multiple smaller calls."
+        )
+
+    doc = _q(document)
+    sht = _q(sheet)
+
+    # Build one set-statement per cell; execute as a single osascript call
+    # so the entire write is atomic from Numbers' perspective.
+    stmts: list[str] = []
+    for r_idx, row in enumerate(values):
+        for c_idx, val in enumerate(row):
+            addr = f"{_col_letter(start_col + c_idx)}{start_row + r_idx}"
+            stmts.append(f'set value of cell "{addr}" to {_as_value(val)}')
+
+    body = "\n                ".join(stmts)
+    script = (
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f"            tell table 1\n"
+        f"                {body}\n"
+        f"            end tell\n"
+        f"        end tell\n"
+        f"    end tell\n"
+        f"end tell"
+    )
+
+    result = subprocess.run(
+        ["osascript", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=_RANGE_TIMEOUT,
+    )
+    if result.returncode != 0:
+        msg = result.stderr.strip()
+        raise NumbersError(msg or f"osascript exited with code {result.returncode}")

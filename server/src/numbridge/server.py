@@ -87,6 +87,54 @@ def get_cell(document: str, sheet: str, row: int, column: int) -> str:
     return numbers_bridge.get_cell(document, sheet, row, column)
 
 
+@mcp.tool()
+def set_cell(
+    document: str,
+    sheet: str,
+    row: int,
+    column: int,
+    value: str | int | float | None,
+) -> None:
+    """Write a value to a single cell.
+
+    Pass a number (int or float) to store a numeric cell, a string for text,
+    or null / "" to clear the cell.  Indices are 1-based (row=1, column=1 is A1).
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        row: 1-indexed row number.
+        column: 1-indexed column number (1 = A, 2 = B, …).
+        value: Value to write. Pass null or "" to clear the cell.
+    """
+    numbers_bridge.set_cell(document, sheet, row, column, value)
+
+
+@mcp.tool()
+def set_range(
+    document: str,
+    sheet: str,
+    start_row: int,
+    start_col: int,
+    values: list[list[str | int | float | None]],
+) -> None:
+    """Write a rectangular block of cells in one call.
+
+    The top-left corner of the written block is (start_row, start_col).
+    Each inner list is one row; rows may differ in length (jagged ranges are fine).
+    Use null or "" for individual cells to clear them.
+    Limited to 1 000 cells total across all rows.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        start_row: 1-indexed row of the top-left corner.
+        start_col: 1-indexed column of the top-left corner.
+        values: List of rows, each row a list of cell values.
+    """
+    numbers_bridge.set_range(document, sheet, start_row, start_col, values)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
