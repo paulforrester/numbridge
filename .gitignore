@@ -1,0 +1,20 @@
+# Swift / SPM
+Launcher/.build/
+Launcher/.swiftpm/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# Build output
+dist/*.app
+
+# Claude Code local settings
+.claude/settings.local.json
