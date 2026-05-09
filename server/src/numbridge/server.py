@@ -179,4 +179,6 @@ def get_sheet_as_table(document: str, sheet: str, table: str) -> list[list[str]]
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    mcp.run(transport="streamable-http")
+    import sys
+    transport = "stdio" if "--stdio" in sys.argv else "streamable-http"
+    mcp.run(transport=transport)
