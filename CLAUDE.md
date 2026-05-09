@@ -8,7 +8,7 @@ NumBridge is a macOS MCP server that lets Claude interact with Apple Numbers via
 
 1. **`Launcher/`** — SwiftUI/AppKit menu-bar app (macOS 13+). Registers as a login item, spawns the Python server, monitors/restarts it, and shows status in the menu bar.
 2. **`server/`** — Python MCP server (`uv`-managed). Exposes Numbers operations as MCP tools. Entry point: `python -m numbridge`.
-3. **AppleScript bridge** — to be added inside `server/src/numbridge/` as the Numbers tools are implemented.
+3. **AppleScript bridge** (`server/src/numbridge/numbers_bridge.py`) — runs `osascript` subprocesses to read and write Numbers documents.
 
 ## Building and running
 
@@ -73,8 +73,31 @@ uv run pytest
 - Uses `FastMCP` (high-level API from the `mcp` SDK).
 - Transport: **streamable-http** — listens on `127.0.0.1:8765` (override with `NUMBRIDGE_PORT`).
 - MCP endpoint: `http://127.0.0.1:8765/mcp` — configure this URL in Claude Desktop / Claude Code.
-- Tools are registered with `@mcp.tool()` decorators; Numbers operations will live in `numbers_bridge.py` and be invoked via `subprocess` + `osascript`.
+- Tools are registered with `@mcp.tool()` decorators; all Numbers I/O goes through `numbers_bridge.py` via `subprocess` + `osascript`.
 - 406 on a plain `GET /mcp` is expected (correct rejection of non-MCP requests); use it as a liveness probe.
+
+**Implemented tools**
+
+| Tool | Signature | Notes |
+|------|-----------|-------|
+| `list_documents` | `() → list[str]` | Names of all open Numbers documents |
+| `list_sheets` | `(document) → list[str]` | Sheet names in a document |
+| `get_cell` | `(document, sheet, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
+| `get_range` | `(document, sheet, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
+| `set_cell` | `(document, sheet, row, column, value) → None` | Write one cell; `None`/`""` clears |
+| `set_range` | `(document, sheet, start_row, start_col, values) → None` | Write a block; rows may be jagged; max 1 000 cells |
+
+All row/column indices are **1-based**. `set_range` generates one multi-statement AppleScript script so the entire write is a single `osascript` call.
+
+### AppleScript bridge
+
+`server/src/numbridge/numbers_bridge.py`
+
+- `_run(script)` — executes via `osascript -e`, raises `NumbersError` on non-zero exit.
+- `_as_value(v)` — converts a Python value to an AppleScript literal: `int`/`float` → bare number (numeric cell), `str` → quoted string (text cell), `None`/`""` → `""` (clears cell). `bool` is checked before `int` to avoid Python's bool-is-int subclass coercion.
+- `get_range` uses `formatted value` and a **collect-then-serialize** pattern: all rows are gathered into an AppleScript list-of-lists first, then serialized with tab+linefeed delimiters in a single pass *after* the loop. Setting `text item delimiters` inside the row loop corrupts the outer string accumulator (only the last row survives).
+- `get_range` uses `.rstrip("\r\n")` — not `.strip()` — on raw output. `.strip()` eats the trailing `\t` on the last row, silently dropping trailing empty cells.
+- Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes).
 
 ## Key constraints
 
