@@ -83,11 +83,11 @@ uv run pytest
 | `list_documents` | `() → list[str]` | Names of all open Numbers documents |
 | `list_sheets` | `(document) → list[str]` | Sheet names in a document |
 | `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
-| `get_cell` | `(document, sheet, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
-| `get_range` | `(document, sheet, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
-| `set_cell` | `(document, sheet, row, column, value) → None` | Write one cell; `None`/`""` clears |
-| `set_range` | `(document, sheet, start_row, start_col, values) → None` | Write a block; rows may be jagged; max 1 000 cells |
-| `get_sheet_as_table` | `(document, sheet) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
+| `get_cell` | `(document, sheet, table, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
+| `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
+| `set_cell` | `(document, sheet, table, row, column, value) → None` | Write one cell; `None`/`""` clears |
+| `set_range` | `(document, sheet, table, start_row, start_col, values) → None` | Write a block; rows may be jagged; max 1 000 cells |
+| `get_sheet_as_table` | `(document, sheet, table) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
 
 All row/column indices are **1-based**. `set_range` generates one multi-statement AppleScript script so the entire write is a single `osascript` call.
 

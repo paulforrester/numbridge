@@ -133,7 +133,7 @@ def list_tables(document: str, sheet: str) -> list[str]:
     return _as_list(raw)
 
 
-def get_cell(document: str, sheet: str, row: int, column: int) -> str:
+def get_cell(document: str, sheet: str, table: str, row: int, column: int) -> str:
     """Return the displayed value of a cell as a string.
 
     Uses ``formatted value`` so numbers, dates, and currency appear exactly
@@ -141,13 +141,14 @@ def get_cell(document: str, sheet: str, row: int, column: int) -> str:
     Row and column are 1-indexed.
     """
     doc = _q(document)
-    sht  = _q(sheet)
+    sht = _q(sheet)
+    tbl = _q(table)
     addr = f"{_col_letter(column)}{row}"
     raw = _run(
         f'tell application "Numbers"\n'
         f'    tell document "{doc}"\n'
         f'        tell sheet "{sht}"\n'
-        f"            tell table 1\n"
+        f'            tell table "{tbl}"\n'
         f'                set fv to formatted value of cell "{addr}"\n'
         f"                if fv is missing value then\n"
         f'                    return ""\n'
@@ -164,6 +165,7 @@ def get_cell(document: str, sheet: str, row: int, column: int) -> str:
 def get_range(
     document: str,
     sheet: str,
+    table: str,
     start_row: int,
     start_col: int,
     end_row: int,
@@ -190,6 +192,7 @@ def get_range(
 
     doc = _q(document)
     sht = _q(sheet)
+    tbl = _q(table)
 
     # Critical: collect all rows into a list-of-lists first, THEN join with
     # text item delimiters.  Setting the delimiter inside the row loop corrupts
@@ -197,7 +200,7 @@ def get_range(
     script = f"""tell application "Numbers"
     tell document "{doc}"
         tell sheet "{sht}"
-            tell table 1
+            tell table "{tbl}"
                 set all_rows to {{}}
                 repeat with r from {start_row} to {end_row}
                     set row_vals to {{}}
@@ -239,6 +242,7 @@ end tell"""
 def set_cell(
     document: str,
     sheet: str,
+    table: str,
     row: int,
     column: int,
     value: str | int | float | None,
@@ -250,12 +254,13 @@ def set_cell(
     """
     doc  = _q(document)
     sht  = _q(sheet)
+    tbl  = _q(table)
     addr = f"{_col_letter(column)}{row}"
     _run(
         f'tell application "Numbers"\n'
         f'    tell document "{doc}"\n'
         f'        tell sheet "{sht}"\n'
-        f"            tell table 1\n"
+        f'            tell table "{tbl}"\n'
         f'                set value of cell "{addr}" to {_as_value(value)}\n'
         f"            end tell\n"
         f"        end tell\n"
@@ -267,6 +272,7 @@ def set_cell(
 def set_range(
     document: str,
     sheet: str,
+    table: str,
     start_row: int,
     start_col: int,
     values: list[list[str | int | float | None]],
@@ -290,6 +296,7 @@ def set_range(
 
     doc = _q(document)
     sht = _q(sheet)
+    tbl = _q(table)
 
     # Build one set-statement per cell; execute as a single osascript call
     # so the entire write is atomic from Numbers' perspective.
@@ -304,7 +311,7 @@ def set_range(
         f'tell application "Numbers"\n'
         f'    tell document "{doc}"\n'
         f'        tell sheet "{sht}"\n'
-        f"            tell table 1\n"
+        f'            tell table "{tbl}"\n'
         f"                {body}\n"
         f"            end tell\n"
         f"        end tell\n"
@@ -323,23 +330,24 @@ def set_range(
         raise NumbersError(msg or f"osascript exited with code {result.returncode}")
 
 
-def get_sheet_as_table(document: str, sheet: str) -> list[list[str]]:
-    """Return all used cells in *sheet* as a list-of-rows.
+def get_sheet_as_table(document: str, sheet: str, table: str) -> list[list[str]]:
+    """Return all used cells in *table* as a list-of-rows.
 
     Backward-scans the table dimensions to find the used range, then reads
     the entire block in one AppleScript call.  Returns an empty list for an
-    empty sheet.
+    empty table.
 
     Raises ValueError if the used range exceeds 2 000 cells (use get_range
-    for targeted reads of large sheets).
+    for targeted reads of large tables).
     """
     doc = _q(document)
     sht = _q(sheet)
+    tbl = _q(table)
 
     script = f"""tell application "Numbers"
     tell document "{doc}"
         tell sheet "{sht}"
-            tell table 1
+            tell table "{tbl}"
                 set rc to row count
                 set cc to column count
                 set last_row to 0
