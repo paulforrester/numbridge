@@ -120,11 +120,18 @@ def set_cell(
     row: int,
     column: int,
     value: str | int | float | None,
+    number_format: str | None = None,
+    currency_symbol: str | None = None,
+    decimal_places: int | None = None,
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
 ) -> None:
-    """Write a value to a single cell.
+    """Write a value to a single cell with optional formatting.
 
     Pass a number (int or float) to store a numeric cell, a string for text,
     or null / "" to clear the cell.  Indices are 1-based (row=1, column=1 is A1).
+    All formatting parameters are optional — omit to leave existing format unchanged.
 
     Args:
         document: Exact name of the open Numbers document.
@@ -133,8 +140,22 @@ def set_cell(
         row: 1-indexed row number.
         column: 1-indexed column number (1 = A, 2 = B, …).
         value: Value to write. Pass null or "" to clear the cell.
+        number_format: "currency", "number", "percentage", or "text".
+        currency_symbol: Accepted but has no effect (not exposed by Numbers scripting API).
+        decimal_places: Accepted but has no effect (not exposed by Numbers scripting API).
+        bold: True to make the cell bold, False to remove bold.
+        italic: True to make the cell italic, False to remove italic.
+        alignment: "left", "center", or "right".
     """
-    numbers_bridge.set_cell(document, sheet, table, row, column, value)
+    numbers_bridge.set_cell(
+        document, sheet, table, row, column, value,
+        number_format=number_format,
+        currency_symbol=currency_symbol,
+        decimal_places=decimal_places,
+        bold=bold,
+        italic=italic,
+        alignment=alignment,
+    )
 
 
 @mcp.tool()
@@ -145,13 +166,20 @@ def set_range(
     start_row: int,
     start_col: int,
     values: list[list[str | int | float | None]],
+    number_format: str | None = None,
+    currency_symbol: str | None = None,
+    decimal_places: int | None = None,
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
 ) -> None:
-    """Write a rectangular block of cells in one call.
+    """Write a rectangular block of cells with optional formatting.
 
     The top-left corner of the written block is (start_row, start_col).
     Each inner list is one row; rows may differ in length (jagged ranges are fine).
     Use null or "" for individual cells to clear them.
     Limited to 1 000 cells total across all rows.
+    Formatting parameters apply uniformly to every written cell.
 
     Args:
         document: Exact name of the open Numbers document.
@@ -160,8 +188,22 @@ def set_range(
         start_row: 1-indexed row of the top-left corner.
         start_col: 1-indexed column of the top-left corner.
         values: List of rows, each row a list of cell values.
+        number_format: "currency", "number", "percentage", or "text".
+        currency_symbol: Accepted but has no effect (not exposed by Numbers scripting API).
+        decimal_places: Accepted but has no effect (not exposed by Numbers scripting API).
+        bold: True to make cells bold, False to remove bold.
+        italic: True to make cells italic, False to remove italic.
+        alignment: "left", "center", or "right".
     """
-    numbers_bridge.set_range(document, sheet, table, start_row, start_col, values)
+    numbers_bridge.set_range(
+        document, sheet, table, start_row, start_col, values,
+        number_format=number_format,
+        currency_symbol=currency_symbol,
+        decimal_places=decimal_places,
+        bold=bold,
+        italic=italic,
+        alignment=alignment,
+    )
 
 
 @mcp.tool()

@@ -76,6 +76,81 @@ def _col_letter(n: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+# Maps user-facing format names to AppleScript constants.
+# "date" is excluded: the "date and time" enum value collides with AppleScript's
+# built-in date type and cannot be set reliably via plain-text osascript.
+_NUMBER_FORMAT_MAP: dict[str, str] = {
+    "currency":   "currency",
+    "number":     "number",
+    "percentage": "percent",
+    "text":       "text",
+}
+
+_ALIGNMENT_MAP: dict[str, str] = {
+    "left":   "left",
+    "center": "center",
+    "right":  "right",
+}
+
+# Substrings in PostScript font-name style suffixes that indicate bold/italic.
+_BOLD_TOKENS   = ("bold", "heavy", "black", "demibold", "semibold")
+_ITALIC_TOKENS = ("italic", "oblique")
+
+
+def _apply_bold_italic(font_name: str, bold: bool | None, italic: bool | None) -> str:
+    """Return a PostScript font name with the requested bold/italic state applied.
+
+    Parses the current style from the hyphen-delimited suffix (e.g.
+    "HelveticaNeue-BoldItalic" → family="HelveticaNeue", style="BoldItalic")
+    and merges in the requested changes, leaving unspecified axes unchanged.
+    Returns the original name unchanged when both bold and italic are None.
+    """
+    if bold is None and italic is None:
+        return font_name
+
+    family, style = (font_name.rsplit("-", 1) if "-" in font_name
+                     else (font_name, ""))
+
+    style_lc  = style.lower()
+    is_bold   = any(t in style_lc for t in _BOLD_TOKENS)
+    is_italic = any(t in style_lc for t in _ITALIC_TOKENS)
+
+    new_bold   = is_bold   if bold   is None else bold
+    new_italic = is_italic if italic is None else italic
+
+    if new_bold and new_italic:
+        suffix = "BoldItalic"
+    elif new_bold:
+        suffix = "Bold"
+    elif new_italic:
+        suffix = "Italic"
+    else:
+        suffix = ""
+
+    return f"{family}-{suffix}" if suffix else family
+
+
+def _fmt_stmts(
+    addr: str,
+    number_format: str | None,
+    alignment: str | None,
+    new_font: str | None,
+) -> list[str]:
+    """Return AppleScript statements for the requested format changes on *addr*."""
+    stmts: list[str] = []
+    if number_format is not None:
+        stmts.append(f'set format of cell "{addr}" to {_NUMBER_FORMAT_MAP[number_format]}')
+    if alignment is not None:
+        stmts.append(f'set alignment of cell "{addr}" to {_ALIGNMENT_MAP[alignment]}')
+    if new_font is not None:
+        stmts.append(f'set font name of cell "{addr}" to "{_q(new_font)}"')
+    return stmts
+
+
+# ---------------------------------------------------------------------------
 # Numbers operations
 # ---------------------------------------------------------------------------
 
@@ -246,22 +321,70 @@ def set_cell(
     row: int,
     column: int,
     value: str | int | float | None,
+    *,
+    number_format: str | None = None,
+    currency_symbol: str | None = None,  # noqa: ARG001 — not exposed by Numbers scripting API
+    decimal_places: int | None = None,   # noqa: ARG001 — not exposed by Numbers scripting API
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
 ) -> None:
-    """Write a single cell value.
+    """Write a single cell value with optional formatting.
 
     Pass a number (int/float) to store a numeric cell, a string for text,
     or None / "" to clear the cell.  Row and column are 1-indexed.
+
+    Formatting parameters (all optional — omit to leave existing format unchanged):
+      number_format   "currency" | "number" | "percentage" | "text"
+      bold            True / False
+      italic          True / False
+      alignment       "left" | "center" | "right"
+
+    Note: decimal_places and currency_symbol are accepted for API compatibility
+    but have no effect — Numbers' scripting API does not expose these properties.
     """
+    if number_format is not None and number_format not in _NUMBER_FORMAT_MAP:
+        raise ValueError(
+            f"number_format must be one of {list(_NUMBER_FORMAT_MAP)}; got {number_format!r}"
+        )
+    if alignment is not None and alignment not in _ALIGNMENT_MAP:
+        raise ValueError(
+            f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+
     doc  = _q(document)
     sht  = _q(sheet)
     tbl  = _q(table)
     addr = f"{_col_letter(column)}{row}"
+
+    # When bold/italic is requested we need the current font name to preserve
+    # the other axis and keep the base font family.
+    new_font: str | None = None
+    if bold is not None or italic is not None:
+        current_font = _run(
+            f'tell application "Numbers"\n'
+            f'    tell document "{doc}"\n'
+            f'        tell sheet "{sht}"\n'
+            f'            tell table "{tbl}"\n'
+            f'                return font name of cell "{addr}"\n'
+            f"            end tell\n"
+            f"        end tell\n"
+            f"    end tell\n"
+            f"end tell"
+        )
+        new_font = _apply_bold_italic(current_font, bold, italic)
+
+    stmts = (
+        [f'set value of cell "{addr}" to {_as_value(value)}']
+        + _fmt_stmts(addr, number_format, alignment, new_font)
+    )
+    body = "\n                ".join(stmts)
     _run(
         f'tell application "Numbers"\n'
         f'    tell document "{doc}"\n'
         f'        tell sheet "{sht}"\n'
         f'            tell table "{tbl}"\n'
-        f'                set value of cell "{addr}" to {_as_value(value)}\n'
+        f"                {body}\n"
         f"            end tell\n"
         f"        end tell\n"
         f"    end tell\n"
@@ -276,15 +399,40 @@ def set_range(
     start_row: int,
     start_col: int,
     values: list[list[str | int | float | None]],
+    *,
+    number_format: str | None = None,
+    currency_symbol: str | None = None,  # noqa: ARG001 — not exposed by Numbers scripting API
+    decimal_places: int | None = None,   # noqa: ARG001 — not exposed by Numbers scripting API
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
 ) -> None:
-    """Write a rectangular block of cells in one AppleScript call.
+    """Write a rectangular block of cells with optional formatting.
 
     *values* is a list of rows; each row is a list of cell values.
     The top-left corner of the written block is (start_row, start_col).
     Rows may be jagged — each is written independently.
     Pass None or "" for individual cells to clear them.
     Limited to 1 000 cells total.
+
+    Formatting parameters apply uniformly to every written cell (all optional):
+      number_format   "currency" | "number" | "percentage" | "text"
+      bold            True / False
+      italic          True / False
+      alignment       "left" | "center" | "right"
+
+    Note: decimal_places and currency_symbol are accepted for API compatibility
+    but have no effect — Numbers' scripting API does not expose these properties.
     """
+    if number_format is not None and number_format not in _NUMBER_FORMAT_MAP:
+        raise ValueError(
+            f"number_format must be one of {list(_NUMBER_FORMAT_MAP)}; got {number_format!r}"
+        )
+    if alignment is not None and alignment not in _ALIGNMENT_MAP:
+        raise ValueError(
+            f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+
     n_cells = sum(len(row) for row in values)
     if n_cells == 0:
         return
@@ -298,6 +446,44 @@ def set_range(
     sht = _q(sheet)
     tbl = _q(table)
 
+    # When bold/italic is requested, read current font names for the written
+    # cells first so we can preserve the other axis and the base font family.
+    font_grid: list[list[str]] | None = None
+    if bold is not None or italic is not None:
+        max_cols = max(len(row) for row in values)
+        end_row  = start_row + len(values) - 1
+        end_col  = start_col + max_cols - 1
+        font_script = f"""tell application "Numbers"
+    tell document "{doc}"
+        tell sheet "{sht}"
+            tell table "{tbl}"
+                set all_rows to {{}}
+                repeat with r from {start_row} to {end_row}
+                    set row_fonts to {{}}
+                    repeat with c from {start_col} to {end_col}
+                        set end of row_fonts to font name of cell c of row r
+                    end repeat
+                    set end of all_rows to row_fonts
+                end repeat
+                set AppleScript's text item delimiters to tab
+                set result to ""
+                repeat with row_fonts in all_rows
+                    set result to result & (row_fonts as text) & linefeed
+                end repeat
+                return result
+            end tell
+        end tell
+    end tell
+end tell"""
+        raw = subprocess.run(
+            ["osascript", "-e", font_script],
+            capture_output=True, text=True, timeout=_RANGE_TIMEOUT,
+        )
+        if raw.returncode != 0:
+            msg = raw.stderr.strip()
+            raise NumbersError(msg or f"osascript exited with code {raw.returncode}")
+        font_grid = _parse_grid(raw.stdout.rstrip("\r\n"))
+
     # Build one set-statement per cell; execute as a single osascript call
     # so the entire write is atomic from Numbers' perspective.
     stmts: list[str] = []
@@ -305,6 +491,14 @@ def set_range(
         for c_idx, val in enumerate(row):
             addr = f"{_col_letter(start_col + c_idx)}{start_row + r_idx}"
             stmts.append(f'set value of cell "{addr}" to {_as_value(val)}')
+            new_font: str | None = None
+            if font_grid is not None:
+                current_font = font_grid[r_idx][c_idx] if (
+                    r_idx < len(font_grid) and c_idx < len(font_grid[r_idx])
+                ) else ""
+                if current_font:
+                    new_font = _apply_bold_italic(current_font, bold, italic)
+            stmts.extend(_fmt_stmts(addr, number_format, alignment, new_font))
 
     body = "\n                ".join(stmts)
     script = (
