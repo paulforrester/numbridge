@@ -218,16 +218,22 @@ def delete_sheet(document: str, sheet_name: str) -> str:
     """
     doc = _q(document)
     name = _q(sheet_name)
+    # Existence check is a separate loop from the delete — deleting `s` while
+    # iterating `repeat with s in sheets` triggers AppleScript's -1728
+    # ("Can't get item N of every sheet") mutation-while-iterating error.
     result = _run(
         f'tell application "Numbers"\n'
         f'    tell document "{doc}"\n'
+        f'        set found to false\n'
         f'        repeat with s in sheets\n'
         f'            if name of s is "{name}" then\n'
-        f'                delete s\n'
-        f'                return "OK"\n'
+        f'                set found to true\n'
+        f'                exit repeat\n'
         f'            end if\n'
         f'        end repeat\n'
-        f'        return "NOT_FOUND"\n'
+        f'        if not found then return "NOT_FOUND"\n'
+        f'        delete sheet "{name}"\n'
+        f'        return "OK"\n'
         f'    end tell\n'
         f'end tell'
     )

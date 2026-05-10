@@ -343,6 +343,17 @@ class TestDeleteSheet:
             result = delete_sheet("doc", "Gone")
         assert "Gone" in result
 
+    def test_deletes_by_name_not_by_loop_variable(self):
+        # Regression: deleting `s` inside `repeat with s in sheets` raises
+        # AppleScript -1728 (mutation while iterating). The script must use
+        # `delete sheet "name"` *after* the loop exits.
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")) as mock:
+            delete_sheet("doc", "MySheet")
+            script = mock.call_args[0][0][2]
+        # Must delete by name reference, not by the loop variable `s`
+        assert 'delete sheet "MySheet"' in script
+
     def test_raises_value_error_when_not_found(self):
         with patch("numbridge.numbers_bridge.subprocess.run",
                    return_value=_make_completed(stdout="NOT_FOUND")):
