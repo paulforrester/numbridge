@@ -180,5 +180,19 @@ def get_sheet_as_table(document: str, sheet: str, table: str) -> list[list[str]]
 
 def main() -> None:
     import sys
-    transport = "stdio" if "--stdio" in sys.argv else "streamable-http"
-    mcp.run(transport=transport)
+    if "--stdio" in sys.argv:
+        mcp.run(transport="stdio")
+        return
+
+    import uvicorn
+    from starlette.middleware.cors import CORSMiddleware
+
+    app = CORSMiddleware(
+        app=mcp.streamable_http_app(),
+        # "null" covers file:// origins; the regex covers localhost on any port
+        allow_origins=["null"],
+        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    uvicorn.run(app, host="127.0.0.1", port=PORT)
