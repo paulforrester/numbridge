@@ -14,7 +14,7 @@ __pycache__/
 .DS_Store
 
 # Build output
-dist/*.app
+dist/
 
 # Claude Code local settings
 .claude/settings.local.json
