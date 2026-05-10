@@ -6,6 +6,7 @@ Claude Desktop / Claude Code connects via:
 import os
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from numbridge import numbers_bridge
 from numbridge.numbers_bridge import NumbersError
@@ -16,6 +17,12 @@ mcp = FastMCP(
     "numbridge",
     host="127.0.0.1",
     port=PORT,
+    # Override auto-configured settings to also permit null origins (file:// pages).
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["127.0.0.1:*", "localhost:*"],
+        allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "null"],
+    ),
 )
 
 
