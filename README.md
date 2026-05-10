@@ -59,6 +59,9 @@ Claude navigates Numbers documents through a four-level hierarchy: **document â†
 | `set_cell` | Write one cell â€” pass a number, string, or null to clear |
 | `set_range` | Write a block of cells in one call (max 1 000) |
 | `sort_table` | Sort table rows by a column (ascending or descending) |
+| `add_sheet` | Add a new blank sheet to a document |
+| `delete_sheet` | Delete a sheet (errors if the sheet doesn't exist) |
+| `rename_sheet` | Rename a sheet (errors if the old name doesn't exist or new name is taken) |
 
 ## Usage
 

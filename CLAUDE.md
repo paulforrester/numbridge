@@ -88,6 +88,9 @@ uv run pytest
 | `set_cell` | `(document, sheet, table, row, column, value) → None` | Write one cell; `None`/`""` clears |
 | `set_range` | `(document, sheet, table, start_row, start_col, values) → None` | Write a block; rows may be jagged; max 1 000 cells |
 | `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
+| `add_sheet` | `(document, sheet_name) → str` | Add a new blank sheet; errors if name already exists |
+| `delete_sheet` | `(document, sheet_name) → str` | Delete a sheet; errors if not found |
+| `rename_sheet` | `(document, old_name, new_name) → str` | Rename a sheet; no-op if names identical; errors if old missing or new taken |
 | `get_sheet_as_table` | `(document, sheet, table) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
 
 All row/column indices are **1-based**. `set_range` generates one multi-statement AppleScript script so the entire write is a single `osascript` call.
@@ -103,6 +106,8 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes), `_SHEET_TIMEOUT = 60 s` (whole-sheet scan+read).
 - `get_sheet_as_table` backward-scans `row count`/`column count` to find the last non-empty row and column, then reads the block with the same collect-then-serialize pattern. Returns `""` from AppleScript for empty sheets; returns `"OVERLIMIT:R:C"` sentinel when the used range exceeds 2 000 cells (Python raises `ValueError`).
 - `sort_table` issues `sort table "…" by column N of table "…" direction ascending/descending` from within `tell sheet` — **not** inside `tell table`. Two non-obvious constraints: (1) the column reference must be scoped to the table (`column N of table "…"`) — bare `column N` in a `tell sheet` context is ambiguous; (2) the direction keyword is plain `direction`, not `in direction` — `in` would be parsed as the start of the `in rows` parameter name, causing a syntax error.
+- `add_sheet` / `delete_sheet` / `rename_sheet` use standard AppleScript `make` / `delete` / `set name of` on sheet objects. Each does an existence check inside the same osascript call (returning sentinel strings `"OK"` / `"EXISTS"` / `"NOT_FOUND"` / `"NEW_EXISTS"`) to avoid a separate round-trip. Numbers inserts new sheets after the currently active sheet regardless of the `at end of sheets` location specifier.
+- `duplicate_sheet` is **not implementable** — Numbers returns `"Sheets can not be copied" (-1717)` for any `duplicate`/`copy` operation on sheets, in both AppleScript and JXA.
 
 ## Key constraints
 
