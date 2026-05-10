@@ -39,7 +39,7 @@ cd server
 # Install deps and run directly (no launcher)
 uv run python -m numbridge
 
-# Run tests (once added)
+# Run tests
 uv run pytest
 ```
 
@@ -87,6 +87,7 @@ uv run pytest
 | `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
 | `set_cell` | `(document, sheet, table, row, column, value) → None` | Write one cell; `None`/`""` clears |
 | `set_range` | `(document, sheet, table, start_row, start_col, values) → None` | Write a block; rows may be jagged; max 1 000 cells |
+| `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
 | `get_sheet_as_table` | `(document, sheet, table) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
 
 All row/column indices are **1-based**. `set_range` generates one multi-statement AppleScript script so the entire write is a single `osascript` call.
@@ -101,6 +102,7 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `get_range` uses `.rstrip("\r\n")` — not `.strip()` — on raw output. `.strip()` eats the trailing `\t` on the last row, silently dropping trailing empty cells.
 - Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes), `_SHEET_TIMEOUT = 60 s` (whole-sheet scan+read).
 - `get_sheet_as_table` backward-scans `row count`/`column count` to find the last non-empty row and column, then reads the block with the same collect-then-serialize pattern. Returns `""` from AppleScript for empty sheets; returns `"OVERLIMIT:R:C"` sentinel when the used range exceeds 2 000 cells (Python raises `ValueError`).
+- `sort_table` issues `sort table "…" by column N in direction ascending/descending` from within `tell sheet` — **not** inside `tell table`. The SDEF defines `sort` with the table as its direct parameter, so it must be called one level up.
 
 ## Key constraints
 
