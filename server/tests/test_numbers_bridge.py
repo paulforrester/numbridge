@@ -20,6 +20,7 @@ from numbridge.numbers_bridge import (
     get_range,
     get_sheet_as_table,
     set_range,
+    sort_table,
 )
 
 
@@ -250,3 +251,55 @@ class TestGetSheetAsTable:
                    return_value=_make_completed(stderr="Numbers not running", returncode=1)):
             with pytest.raises(NumbersError):
                 get_sheet_as_table("doc", "sheet", "table")
+
+
+# ---------------------------------------------------------------------------
+# sort_table — validation guards and subprocess interactions
+# ---------------------------------------------------------------------------
+
+class TestSortTable:
+    def test_raises_for_zero_column(self):
+        with pytest.raises(ValueError, match="sort_column"):
+            sort_table("doc", "sheet", "table", 0)
+
+    def test_raises_for_negative_column(self):
+        with pytest.raises(ValueError, match="sort_column"):
+            sort_table("doc", "sheet", "table", -1)
+
+    def test_calls_subprocess_ascending(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            sort_table("doc", "sheet", "table", 1)
+            script = mock.call_args[0][0][2]
+            assert "ascending" in script
+            assert "column 1" in script
+
+    def test_calls_subprocess_descending(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            sort_table("doc", "sheet", "table", 3, ascending=False)
+            script = mock.call_args[0][0][2]
+            assert "descending" in script
+            assert "column 3" in script
+
+    def test_default_direction_is_ascending(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            sort_table("doc", "sheet", "table", 2)
+            script = mock.call_args[0][0][2]
+            assert "ascending" in script
+
+    def test_sort_called_outside_tell_table(self):
+        # sort's direct parameter is a table reference, so it must be issued
+        # from within tell sheet, not inside tell table.
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            sort_table("doc", "sheet", "table", 1)
+            script = mock.call_args[0][0][2]
+            assert 'sort table' in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="Numbers not running", returncode=1)):
+            with pytest.raises(NumbersError):
+                sort_table("doc", "sheet", "table", 1)

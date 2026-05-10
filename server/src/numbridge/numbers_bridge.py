@@ -524,6 +524,37 @@ end tell"""
         raise NumbersError(msg or f"osascript exited with code {result.returncode}")
 
 
+def sort_table(
+    document: str,
+    sheet: str,
+    table: str,
+    sort_column: int,
+    ascending: bool = True,
+) -> None:
+    """Sort *table* rows by *sort_column* using Numbers' native sort.
+
+    Numbers' built-in sort preserves formulas, formatting, and header rows.
+    sort_column is 1-indexed. Raises ValueError for non-positive column numbers.
+    """
+    if sort_column < 1:
+        raise ValueError(f"sort_column must be >= 1; got {sort_column}")
+    direction = "ascending" if ascending else "descending"
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    # sort takes the table as its direct parameter, so it is called from
+    # within tell sheet — not inside tell table.
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            sort table "{tbl}" by column {sort_column} in direction {direction}\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+
+
 def get_sheet_as_table(document: str, sheet: str, table: str) -> list[list[str]]:
     """Return all used cells in *table* as a list-of-rows.
 

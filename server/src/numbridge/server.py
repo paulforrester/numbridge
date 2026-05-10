@@ -207,6 +207,29 @@ def set_range(
 
 
 @mcp.tool()
+def sort_table(
+    document: str,
+    sheet: str,
+    table: str,
+    sort_column: int,
+    ascending: bool = True,
+) -> None:
+    """Sort the rows of a Numbers table by a single column.
+
+    Uses Numbers' native sort, which correctly handles formulas, cell
+    formatting, and header rows (headers are never moved).
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        sort_column: 1-indexed column number to sort by.
+        ascending: True (default) for A→Z / smallest-first; False for Z→A / largest-first.
+    """
+    numbers_bridge.sort_table(document, sheet, table, sort_column, ascending)
+
+
+@mcp.tool()
 def get_sheet_as_table(document: str, sheet: str, table: str) -> list[list[str]]:
     """Read all used cells in a table and return them as a list of rows.
 
