@@ -71,10 +71,12 @@ uv run pytest
 `server/src/numbridge/server.py`
 
 - Uses `FastMCP` (high-level API from the `mcp` SDK).
-- Transport: **streamable-http** — listens on `127.0.0.1:8765` (override with `NUMBRIDGE_PORT`).
-- MCP endpoint: `http://127.0.0.1:8765/mcp` — configure this URL in Claude Desktop / Claude Code.
+- Transport: **streamable-http** — listens on `127.0.0.1:8765` (override with `NUMBRIDGE_PORT`). Pass `--stdio` to run in stdio mode for Claude Desktop.
+- MCP endpoint: `http://127.0.0.1:8765/mcp` — configure this URL in Claude Code. Claude Desktop uses stdio transport (`uv run … python -m numbridge --stdio`).
+- `mcp.streamable_http_app()` is wrapped in Starlette `CORSMiddleware` to allow `null` origins (file:// pages) and localhost. `TransportSecuritySettings` is also overridden to permit `null` origins — FastMCP's default denies them.
 - Tools are registered with `@mcp.tool()` decorators; all Numbers I/O goes through `numbers_bridge.py` via `subprocess` + `osascript`.
 - 406 on a plain `GET /mcp` is expected (correct rejection of non-MCP requests); use it as a liveness probe.
+- MCP streamable-HTTP requires a 3-step handshake before any tool call: (1) POST `initialize` → get `mcp-session-id` header, (2) POST `notifications/initialized` with that header (no response body), (3) POST the actual request. Omitting step 2 causes `-32602 Invalid request parameters`.
 
 **Implemented tools**
 
@@ -85,8 +87,8 @@ uv run pytest
 | `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
 | `get_cell` | `(document, sheet, table, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
 | `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
-| `set_cell` | `(document, sheet, table, row, column, value) → None` | Write one cell; `None`/`""` clears |
-| `set_range` | `(document, sheet, table, start_row, start_col, values) → None` | Write a block; rows may be jagged; max 1 000 cells |
+| `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
+| `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
 | `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
 | `add_sheet` | `(document, sheet_name) → str` | Add a new blank sheet; errors if name already exists |
 | `delete_sheet` | `(document, sheet_name) → str` | Delete a sheet; errors if not found |
@@ -104,9 +106,11 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `get_range` uses `formatted value` and a **collect-then-serialize** pattern: all rows are gathered into an AppleScript list-of-lists first, then serialized with tab+linefeed delimiters in a single pass *after* the loop. Setting `text item delimiters` inside the row loop corrupts the outer string accumulator (only the last row survives).
 - `get_range` uses `.rstrip("\r\n")` — not `.strip()` — on raw output. `.strip()` eats the trailing `\t` on the last row, silently dropping trailing empty cells.
 - Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes), `_SHEET_TIMEOUT = 60 s` (whole-sheet scan+read).
+- `set_cell` / `set_range` optional formatting: `number_format` ("currency" | "number" | "percentage" | "text") maps to AppleScript constants `currency` / `number` / `percent` / `text` — note `percentage` → `percent`. The `date` format is excluded because `date and time` collides with AppleScript's built-in date type and cannot be set in plain-text osascript. `bold` / `italic` are not direct cell properties — implemented by reading the current PostScript font name (`font name of cell`), parsing the hyphen-delimited style suffix (e.g. `HelveticaNeue-BoldItalic`), and rewriting it. `currency_symbol` and `decimal_places` are accepted but silently ignored — not in the Numbers scripting dictionary. For `set_range` with bold/italic, the entire font grid is read first in one AppleScript call before the batch write.
 - `get_sheet_as_table` backward-scans `row count`/`column count` to find the last non-empty row and column, then reads the block with the same collect-then-serialize pattern. Returns `""` from AppleScript for empty sheets; returns `"OVERLIMIT:R:C"` sentinel when the used range exceeds 2 000 cells (Python raises `ValueError`).
 - `sort_table` issues `sort table "…" by column N of table "…" direction ascending/descending` from within `tell sheet` — **not** inside `tell table`. Two non-obvious constraints: (1) the column reference must be scoped to the table (`column N of table "…"`) — bare `column N` in a `tell sheet` context is ambiguous; (2) the direction keyword is plain `direction`, not `in direction` — `in` would be parsed as the start of the `in rows` parameter name, causing a syntax error.
 - `add_sheet` / `delete_sheet` / `rename_sheet` use standard AppleScript `make` / `delete` / `set name of` on sheet objects. Each does an existence check inside the same osascript call (returning sentinel strings `"OK"` / `"EXISTS"` / `"NOT_FOUND"` / `"NEW_EXISTS"`) to avoid a separate round-trip. Numbers inserts new sheets after the currently active sheet regardless of the `at end of sheets` location specifier.
+- `delete_sheet` separates the existence-check loop from the `delete` call — using `delete sheet "name"` **after** the loop rather than `delete s` **inside** it. Deleting `s` while iterating `repeat with s in sheets` triggers AppleScript `-1728` ("Can't get item N of every sheet of document"). This applies to any destructive mutation of a collection mid-iteration in AppleScript.
 - `duplicate_sheet` is **not implementable** — Numbers returns `"Sheets can not be copied" (-1717)` for any `duplicate`/`copy` operation on sheets, in both AppleScript and JXA.
 
 ## Key constraints
