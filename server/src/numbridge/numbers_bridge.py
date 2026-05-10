@@ -187,6 +187,88 @@ def list_sheets(document: str) -> list[str]:
     return _as_list(raw)
 
 
+def add_sheet(document: str, sheet_name: str) -> str:
+    """Add a new blank sheet to *document*.
+
+    Raises ValueError if a sheet with that name already exists.
+    Numbers inserts the new sheet after the currently active sheet.
+    """
+    doc = _q(document)
+    name = _q(sheet_name)
+    result = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        repeat with s in sheets\n'
+        f'            if name of s is "{name}" then return "EXISTS"\n'
+        f'        end repeat\n'
+        f'        make new sheet with properties {{name:"{name}"}}\n'
+        f'        return "OK"\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    if result == "EXISTS":
+        raise ValueError(f"Sheet {sheet_name!r} already exists in {document!r}")
+    return f"Sheet {sheet_name!r} added to {document!r}"
+
+
+def delete_sheet(document: str, sheet_name: str) -> str:
+    """Delete a sheet from *document*.
+
+    Raises ValueError if the sheet does not exist.
+    """
+    doc = _q(document)
+    name = _q(sheet_name)
+    result = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        repeat with s in sheets\n'
+        f'            if name of s is "{name}" then\n'
+        f'                delete s\n'
+        f'                return "OK"\n'
+        f'            end if\n'
+        f'        end repeat\n'
+        f'        return "NOT_FOUND"\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    if result == "NOT_FOUND":
+        raise ValueError(f"Sheet {sheet_name!r} not found in {document!r}")
+    return f"Sheet {sheet_name!r} deleted from {document!r}"
+
+
+def rename_sheet(document: str, old_name: str, new_name: str) -> str:
+    """Rename a sheet in *document* from *old_name* to *new_name*.
+
+    Raises ValueError if *old_name* does not exist or *new_name* is already taken.
+    """
+    if old_name == new_name:
+        return f"Sheet {old_name!r} already has that name"
+    doc = _q(document)
+    old = _q(old_name)
+    new = _q(new_name)
+    result = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        repeat with s in sheets\n'
+        f'            if name of s is "{new}" then return "NEW_EXISTS"\n'
+        f'        end repeat\n'
+        f'        repeat with s in sheets\n'
+        f'            if name of s is "{old}" then\n'
+        f'                set name of s to "{new}"\n'
+        f'                return "OK"\n'
+        f'            end if\n'
+        f'        end repeat\n'
+        f'        return "NOT_FOUND"\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    if result == "NEW_EXISTS":
+        raise ValueError(f"Sheet {new_name!r} already exists in {document!r}")
+    if result == "NOT_FOUND":
+        raise ValueError(f"Sheet {old_name!r} not found in {document!r}")
+    return f"Sheet {old_name!r} renamed to {new_name!r} in {document!r}"
+
+
 def list_tables(document: str, sheet: str) -> list[str]:
     """Return the names of all tables in *sheet*."""
     doc = _q(document)

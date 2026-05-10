@@ -17,8 +17,11 @@ from numbridge.numbers_bridge import (
     _parse_grid,
     _q,
     _run,
+    add_sheet,
+    delete_sheet,
     get_range,
     get_sheet_as_table,
+    rename_sheet,
     set_range,
     sort_table,
 )
@@ -303,3 +306,87 @@ class TestSortTable:
                    return_value=_make_completed(stderr="Numbers not running", returncode=1)):
             with pytest.raises(NumbersError):
                 sort_table("doc", "sheet", "table", 1)
+
+
+# ---------------------------------------------------------------------------
+# add_sheet
+# ---------------------------------------------------------------------------
+
+class TestAddSheet:
+    def test_returns_success_message(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")):
+            result = add_sheet("doc", "New Sheet")
+        assert "New Sheet" in result
+
+    def test_raises_value_error_when_sheet_exists(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="EXISTS")):
+            with pytest.raises(ValueError, match="already exists"):
+                add_sheet("doc", "Existing")
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="doc not found", returncode=1)):
+            with pytest.raises(NumbersError):
+                add_sheet("doc", "Sheet")
+
+
+# ---------------------------------------------------------------------------
+# delete_sheet
+# ---------------------------------------------------------------------------
+
+class TestDeleteSheet:
+    def test_returns_success_message(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")):
+            result = delete_sheet("doc", "Gone")
+        assert "Gone" in result
+
+    def test_raises_value_error_when_not_found(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="NOT_FOUND")):
+            with pytest.raises(ValueError, match="not found"):
+                delete_sheet("doc", "Missing")
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="doc not found", returncode=1)):
+            with pytest.raises(NumbersError):
+                delete_sheet("doc", "Sheet")
+
+
+# ---------------------------------------------------------------------------
+# rename_sheet
+# ---------------------------------------------------------------------------
+
+class TestRenameSheet:
+    def test_returns_success_message(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")):
+            result = rename_sheet("doc", "Old", "New")
+        assert "Old" in result and "New" in result
+
+    def test_noop_when_names_identical(self):
+        with patch("numbridge.numbers_bridge.subprocess.run") as mock:
+            result = rename_sheet("doc", "Same", "Same")
+            mock.assert_not_called()
+        assert "already has that name" in result
+
+    def test_raises_value_error_when_new_name_taken(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="NEW_EXISTS")):
+            with pytest.raises(ValueError, match="already exists"):
+                rename_sheet("doc", "Old", "Taken")
+
+    def test_raises_value_error_when_old_name_not_found(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="NOT_FOUND")):
+            with pytest.raises(ValueError, match="not found"):
+                rename_sheet("doc", "Ghost", "New")
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="doc not found", returncode=1)):
+            with pytest.raises(NumbersError):
+                rename_sheet("doc", "Old", "New")

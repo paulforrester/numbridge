@@ -50,6 +50,42 @@ def list_sheets(document: str) -> list[str]:
 
 
 @mcp.tool()
+def add_sheet(document: str, sheet_name: str) -> str:
+    """Add a new blank sheet to a Numbers document.
+
+    Numbers inserts the new sheet after the currently active sheet.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet_name: Name for the new sheet. Must not already exist in the document.
+    """
+    return numbers_bridge.add_sheet(document, sheet_name)
+
+
+@mcp.tool()
+def delete_sheet(document: str, sheet_name: str) -> str:
+    """Delete a sheet from a Numbers document.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet_name: Exact name of the sheet to delete. Must exist in the document.
+    """
+    return numbers_bridge.delete_sheet(document, sheet_name)
+
+
+@mcp.tool()
+def rename_sheet(document: str, old_name: str, new_name: str) -> str:
+    """Rename a sheet in a Numbers document.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        old_name: Current name of the sheet to rename. Must exist.
+        new_name: New name for the sheet. Must not already be used by another sheet.
+    """
+    return numbers_bridge.rename_sheet(document, old_name, new_name)
+
+
+@mcp.tool()
 def list_tables(document: str, sheet: str) -> list[str]:
     """Return the names of all tables in a sheet.
 
