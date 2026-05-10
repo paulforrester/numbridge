@@ -201,5 +201,7 @@ def main() -> None:
         allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
         allow_methods=["*"],
         allow_headers=["*"],
+        # Expose mcp-session-id so browser JS can read it and echo it back
+        expose_headers=["mcp-session-id"],
     )
     uvicorn.run(app, host="127.0.0.1", port=PORT)
