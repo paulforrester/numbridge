@@ -271,16 +271,16 @@ class TestSortTable:
                    return_value=_make_completed()) as mock:
             sort_table("doc", "sheet", "table", 1)
             script = mock.call_args[0][0][2]
-            assert "ascending" in script
-            assert "column 1" in script
+            assert "direction ascending" in script
+            assert "column 1 of table" in script
 
     def test_calls_subprocess_descending(self):
         with patch("numbridge.numbers_bridge.subprocess.run",
                    return_value=_make_completed()) as mock:
             sort_table("doc", "sheet", "table", 3, ascending=False)
             script = mock.call_args[0][0][2]
-            assert "descending" in script
-            assert "column 3" in script
+            assert "direction descending" in script
+            assert "column 3 of table" in script
 
     def test_default_direction_is_ascending(self):
         with patch("numbridge.numbers_bridge.subprocess.run",

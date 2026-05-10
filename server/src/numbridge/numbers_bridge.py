@@ -544,11 +544,15 @@ def sort_table(
     tbl = _q(table)
     # sort takes the table as its direct parameter, so it is called from
     # within tell sheet — not inside tell table.
+    # "column N" must be scoped to the table explicitly; bare "column N" in a
+    # tell-sheet context is ambiguous.  The direction keyword is plain
+    # "direction", NOT "in direction" — "in" would be parsed as the "in rows"
+    # parameter name and cause a syntax error.
     _run(
         f'tell application "Numbers"\n'
         f'    tell document "{doc}"\n'
         f'        tell sheet "{sht}"\n'
-        f'            sort table "{tbl}" by column {sort_column} in direction {direction}\n'
+        f'            sort table "{tbl}" by column {sort_column} of table "{tbl}" direction {direction}\n'
         f'        end tell\n'
         f'    end tell\n'
         f'end tell'
