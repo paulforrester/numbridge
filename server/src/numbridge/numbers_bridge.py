@@ -686,6 +686,43 @@ end tell"""
         raise NumbersError(msg or f"osascript exited with code {result.returncode}")
 
 
+def resize_table(
+    document: str,
+    sheet: str,
+    table: str,
+    num_rows: int,
+    num_columns: int,
+) -> str:
+    """Resize a Numbers table to exactly *num_rows* rows and *num_columns* columns.
+
+    Use this before writing data that exceeds the table's current dimensions —
+    Numbers raises -10006 when a set_cell / set_range call targets a cell outside
+    the table boundary.  Both row and column counts include any header row/column.
+
+    Raises ValueError if either dimension is less than 1.
+    """
+    if num_rows < 1:
+        raise ValueError(f"num_rows must be >= 1; got {num_rows}")
+    if num_columns < 1:
+        raise ValueError(f"num_columns must be >= 1; got {num_columns}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set row count to {num_rows}\n'
+        f'                set column count to {num_columns}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Table {table!r} resized to {num_rows} rows × {num_columns} columns"
+
+
 def sort_table(
     document: str,
     sheet: str,

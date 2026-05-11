@@ -92,6 +92,7 @@ uv run pytest
 | `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
 | `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
 | `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
+| `resize_table` | `(document, sheet, table, num_rows, num_columns) → str` | Set row and column count; call before writing beyond the default 4-column boundary (-10006) |
 | `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
 | `add_sheet` | `(document, sheet_name) → str` | Add a new blank sheet; errors if name already exists |
 | `delete_sheet` | `(document, sheet_name) → str` | Delete a sheet; errors if not found |
@@ -117,6 +118,7 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `sort_table` issues `sort table "…" by column N of table "…" direction ascending/descending` from within `tell sheet` — **not** inside `tell table`. Two non-obvious constraints: (1) the column reference must be scoped to the table (`column N of table "…"`) — bare `column N` in a `tell sheet` context is ambiguous; (2) the direction keyword is plain `direction`, not `in direction` — `in` would be parsed as the start of the `in rows` parameter name, causing a syntax error.
 - `add_sheet` / `delete_sheet` / `rename_sheet` use standard AppleScript `make` / `delete` / `set name of` on sheet objects. Each does an existence check inside the same osascript call (returning sentinel strings `"OK"` / `"EXISTS"` / `"NOT_FOUND"` / `"NEW_EXISTS"`) to avoid a separate round-trip. Numbers inserts new sheets after the currently active sheet regardless of the `at end of sheets` location specifier.
 - `delete_sheet` separates the existence-check loop from the `delete` call — using `delete sheet "name"` **after** the loop rather than `delete s` **inside** it. Deleting `s` while iterating `repeat with s in sheets` triggers AppleScript `-1728` ("Can't get item N of every sheet of document"). This applies to any destructive mutation of a collection mid-iteration in AppleScript.
+- `resize_table` sets `row count` and `column count` directly on the table object (`set row count to N`). New documents default to 4 columns — writing beyond the current boundary raises AppleScript `-10006`. Always call `resize_table` before `set_cell` / `set_range` when targeting columns 5+.
 - `duplicate_sheet` is **not implementable** — Numbers returns `"Sheets can not be copied" (-1717)` for any `duplicate`/`copy` operation on sheets, in both AppleScript and JXA.
 
 ## Key constraints

@@ -25,6 +25,7 @@ from numbridge.numbers_bridge import (
     get_sheet_as_table,
     open_document,
     rename_sheet,
+    resize_table,
     set_range,
     sort_table,
 )
@@ -347,6 +348,50 @@ class TestGetSheetAsTable:
                    return_value=_make_completed(stderr="Numbers not running", returncode=1)):
             with pytest.raises(NumbersError):
                 get_sheet_as_table("doc", "sheet", "table")
+
+
+# ---------------------------------------------------------------------------
+# resize_table
+# ---------------------------------------------------------------------------
+
+class TestResizeTable:
+    def test_returns_confirmation_string(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()):
+            result = resize_table("doc", "Sheet 1", "Table 1", 30, 28)
+        assert "Table 1" in result
+        assert "30" in result
+        assert "28" in result
+
+    def test_raises_for_zero_rows(self):
+        with pytest.raises(ValueError, match="num_rows"):
+            resize_table("doc", "Sheet 1", "Table 1", 0, 10)
+
+    def test_raises_for_negative_rows(self):
+        with pytest.raises(ValueError, match="num_rows"):
+            resize_table("doc", "Sheet 1", "Table 1", -1, 10)
+
+    def test_raises_for_zero_columns(self):
+        with pytest.raises(ValueError, match="num_columns"):
+            resize_table("doc", "Sheet 1", "Table 1", 10, 0)
+
+    def test_raises_for_negative_columns(self):
+        with pytest.raises(ValueError, match="num_columns"):
+            resize_table("doc", "Sheet 1", "Table 1", 10, -5)
+
+    def test_script_sets_row_and_column_count(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            resize_table("doc", "Sheet 1", "Table 1", 5, 10)
+            script = mock.call_args[0][0][2]
+        assert "set row count to 5" in script
+        assert "set column count to 10" in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="Numbers not running", returncode=1)):
+            with pytest.raises(NumbersError):
+                resize_table("doc", "Sheet 1", "Table 1", 10, 10)
 
 
 # ---------------------------------------------------------------------------

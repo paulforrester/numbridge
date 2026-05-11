@@ -79,6 +79,7 @@ Claude navigates Numbers documents through a four-level hierarchy: **document â†
 
 | Tool | Description |
 |------|-------------|
+| `resize_table` | Set a table's row and column count (call before writing beyond the default 4-column boundary) |
 | `set_cell` | Write one cell â€” pass a number, string, or null to clear |
 | `set_range` | Write a block of cells in one call (max 1 000) |
 | `sort_table` | Sort table rows by a column (ascending or descending) |

@@ -280,6 +280,31 @@ def set_range(
 
 
 @mcp.tool()
+def resize_table(
+    document: str,
+    sheet: str,
+    table: str,
+    num_rows: int,
+    num_columns: int,
+) -> str:
+    """Resize a Numbers table to the given number of rows and columns.
+
+    Call this before writing data that would exceed the current table boundary
+    — Numbers raises an error (-10006) when set_cell or set_range targets a
+    cell outside the table dimensions.  New documents default to 4 columns and
+    a handful of rows, so resize first when building wide or tall tables.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        num_rows: Desired total number of rows (including any header row).
+        num_columns: Desired total number of columns (including any header column).
+    """
+    return numbers_bridge.resize_table(document, sheet, table, num_rows, num_columns)
+
+
+@mcp.tool()
 def sort_table(
     document: str,
     sheet: str,
