@@ -154,6 +154,31 @@ def _fmt_stmts(
 # Numbers operations
 # ---------------------------------------------------------------------------
 
+def create_document(name: str | None = None) -> str:
+    """Create a new blank Numbers document and return its name.
+
+    If *name* is provided the document is created with that title.
+    If omitted, Numbers assigns the next available "Untitled N" name.
+    The document is unsaved (in-memory only) until the user saves it.
+    """
+    if name is not None:
+        n = _q(name)
+        result = _run(
+            f'tell application "Numbers"\n'
+            f'    set doc to make new document with properties {{name:"{n}"}}\n'
+            f'    return name of doc\n'
+            f'end tell'
+        )
+    else:
+        result = _run(
+            'tell application "Numbers"\n'
+            '    set doc to make new document\n'
+            '    return name of doc\n'
+            'end tell'
+        )
+    return result
+
+
 def list_documents() -> list[str]:
     """Return the names of all currently open Numbers documents."""
     raw = _run(

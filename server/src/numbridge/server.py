@@ -31,6 +31,20 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
+def create_document(name: str | None = None) -> str:
+    """Create a new blank Numbers document and return its name.
+
+    The document is created in-memory and unsaved — Numbers will prompt
+    the user to save when they close it or you can save it via the UI.
+
+    Args:
+        name: Optional title for the new document. If omitted, Numbers
+              assigns the next available "Untitled N" name.
+    """
+    return numbers_bridge.create_document(name)
+
+
+@mcp.tool()
 def list_documents() -> list[str]:
     """Return the names of all currently open Numbers documents.
 

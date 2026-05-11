@@ -82,6 +82,7 @@ uv run pytest
 
 | Tool | Signature | Notes |
 |------|-----------|-------|
+| `create_document` | `(name=None) → str` | Create a new blank document; returns its actual name |
 | `list_documents` | `() → list[str]` | Names of all open Numbers documents |
 | `list_sheets` | `(document) → list[str]` | Sheet names in a document |
 | `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
@@ -101,6 +102,7 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 
 `server/src/numbridge/numbers_bridge.py`
 
+- `create_document` uses `make new document with properties {name:"…"}` (or without properties when no name is given). Numbers assigns "Untitled N" automatically. The document is in-memory only until saved.
 - `_run(script)` — executes via `osascript -e`, raises `NumbersError` on non-zero exit.
 - `_as_value(v)` — converts a Python value to an AppleScript literal: `int`/`float` → bare number (numeric cell), `str` → quoted string (text cell), `None`/`""` → `""` (clears cell). `bool` is checked before `int` to avoid Python's bool-is-int subclass coercion.
 - `get_range` uses `formatted value` and a **collect-then-serialize** pattern: all rows are gathered into an AppleScript list-of-lists first, then serialized with tab+linefeed delimiters in a single pass *after* the loop. Setting `text item delimiters` inside the row loop corrupts the outer string accumulator (only the last row survives).

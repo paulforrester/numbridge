@@ -18,6 +18,7 @@ from numbridge.numbers_bridge import (
     _q,
     _run,
     add_sheet,
+    create_document,
     delete_sheet,
     get_range,
     get_sheet_as_table,
@@ -119,6 +120,34 @@ class TestParseGrid:
 
     def test_filters_empty_lines(self):
         assert _parse_grid("a\tb\n") == [["a", "b"]]
+
+
+# ---------------------------------------------------------------------------
+# create_document
+# ---------------------------------------------------------------------------
+
+class TestCreateDocument:
+    def test_returns_document_name_with_explicit_name(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="My Sheet")) as mock:
+            result = create_document("My Sheet")
+        assert result == "My Sheet"
+        script = mock.call_args[0][0][2]
+        assert "My Sheet" in script
+
+    def test_returns_document_name_without_name(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="Untitled")) as mock:
+            result = create_document()
+        assert result == "Untitled"
+        script = mock.call_args[0][0][2]
+        assert "properties" not in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="Numbers not running", returncode=1)):
+            with pytest.raises(NumbersError):
+                create_document("Test")
 
 
 # ---------------------------------------------------------------------------
