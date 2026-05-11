@@ -18,10 +18,12 @@ from numbridge.numbers_bridge import (
     _q,
     _run,
     add_sheet,
+    close_document,
     create_document,
     delete_sheet,
     get_range,
     get_sheet_as_table,
+    open_document,
     rename_sheet,
     set_range,
     sort_table,
@@ -120,6 +122,68 @@ class TestParseGrid:
 
     def test_filters_empty_lines(self):
         assert _parse_grid("a\tb\n") == [["a", "b"]]
+
+
+# ---------------------------------------------------------------------------
+# open_document
+# ---------------------------------------------------------------------------
+
+class TestOpenDocument:
+    def test_raises_value_error_for_missing_file(self):
+        with pytest.raises(ValueError, match="File not found"):
+            open_document("/nonexistent/path/file.numbers")
+
+    def test_returns_document_name_on_success(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="Budget")):
+            with patch("numbridge.numbers_bridge.os.path.exists", return_value=True):
+                result = open_document("/some/Budget.numbers")
+        assert result == "Budget"
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="can't open", returncode=1)):
+            with patch("numbridge.numbers_bridge.os.path.exists", return_value=True):
+                with pytest.raises(NumbersError):
+                    open_document("/some/file.numbers")
+
+
+# ---------------------------------------------------------------------------
+# close_document
+# ---------------------------------------------------------------------------
+
+class TestCloseDocument:
+    def test_returns_success_message(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")):
+            result = close_document("My Doc")
+        assert "My Doc" in result
+
+    def test_raises_value_error_when_not_open(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="NOT_FOUND")):
+            with pytest.raises(ValueError, match="not open"):
+                close_document("Missing Doc")
+
+    def test_default_save_is_false(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")) as mock:
+            close_document("My Doc")
+            script = mock.call_args[0][0][2]
+        assert "saving no" in script
+
+    def test_save_true_uses_saving_yes(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")) as mock:
+            close_document("My Doc", save=True)
+            script = mock.call_args[0][0][2]
+        assert "saving yes" in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="Numbers not running", returncode=1)):
+            with pytest.raises(NumbersError):
+                close_document("My Doc")
 
 
 # ---------------------------------------------------------------------------

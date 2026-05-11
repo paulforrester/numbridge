@@ -31,6 +31,29 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
+def open_document(path: str) -> str:
+    """Open a Numbers document from a file path and return its name.
+
+    Args:
+        path: Absolute POSIX path to a .numbers file (e.g. "/Users/you/Documents/Budget.numbers").
+    """
+    return numbers_bridge.open_document(path)
+
+
+@mcp.tool()
+def close_document(document: str, save: bool = False) -> str:
+    """Close an open Numbers document.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        save: If True, save to the document's existing file before closing.
+              Defaults to False (discard unsaved changes). Raises an error
+              for Untitled documents that have never been saved to a file.
+    """
+    return numbers_bridge.close_document(document, save)
+
+
+@mcp.tool()
 def create_document(name: str | None = None) -> str:
     """Create a new blank Numbers document and return its name.
 

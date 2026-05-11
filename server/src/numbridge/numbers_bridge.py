@@ -3,6 +3,7 @@
 All public functions run synchronously via osascript.  They raise NumbersError
 on any AppleScript error (Numbers not running, document not found, etc.).
 """
+import os
 import subprocess
 
 _TIMEOUT = 10        # seconds — single-cell / list calls
@@ -177,6 +178,54 @@ def create_document(name: str | None = None) -> str:
             'end tell'
         )
     return result
+
+
+def open_document(path: str) -> str:
+    """Open a Numbers document from *path* and return its name.
+
+    *path* must be an absolute POSIX path to a .numbers file.
+    Raises ValueError if the file does not exist.
+    """
+    if not os.path.exists(path):
+        raise ValueError(f"File not found: {path!r}")
+    p = _q(path)
+    return _run(
+        f'tell application "Numbers"\n'
+        f'    set doc to open POSIX file "{p}"\n'
+        f'    return name of doc\n'
+        f'end tell'
+    )
+
+
+def close_document(document: str, save: bool = False) -> str:
+    """Close an open Numbers document.
+
+    *save=False* (default) discards unsaved changes.
+    *save=True* saves to the document's existing file before closing;
+    raises NumbersError for unsaved (Untitled) documents with no file path.
+    Raises ValueError if *document* is not currently open.
+    """
+    doc = _q(document)
+    saving = "yes" if save else "no"
+    # Existence check is a separate loop from the close — same pattern as
+    # delete_sheet to avoid mutating the collection mid-iteration.
+    result = _run(
+        f'tell application "Numbers"\n'
+        f'    set found to false\n'
+        f'    repeat with d in documents\n'
+        f'        if name of d is "{doc}" then\n'
+        f'            set found to true\n'
+        f'            exit repeat\n'
+        f'        end if\n'
+        f'    end repeat\n'
+        f'    if not found then return "NOT_FOUND"\n'
+        f'    close document "{doc}" saving {saving}\n'
+        f'    return "OK"\n'
+        f'end tell'
+    )
+    if result == "NOT_FOUND":
+        raise ValueError(f"Document {document!r} is not open")
+    return f"Document {document!r} closed"
 
 
 def list_documents() -> list[str]:

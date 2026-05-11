@@ -82,6 +82,8 @@ uv run pytest
 
 | Tool | Signature | Notes |
 |------|-----------|-------|
+| `open_document` | `(path) → str` | Open a .numbers file by absolute POSIX path; returns document name |
+| `close_document` | `(document, save=False) → str` | Close an open document; save=True saves before closing |
 | `create_document` | `(name=None) → str` | Create a new blank document; returns its actual name |
 | `list_documents` | `() → list[str]` | Names of all open Numbers documents |
 | `list_sheets` | `(document) → list[str]` | Sheet names in a document |
@@ -102,6 +104,8 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 
 `server/src/numbridge/numbers_bridge.py`
 
+- `open_document` uses `open POSIX file "path"` — path is validated with `os.path.exists` before the AppleScript call to give a clean `ValueError` rather than a raw AppleScript error.
+- `close_document` uses `close document "name" saving yes/no`. Existence check is a separate loop from the close (same mutation-safety pattern as `delete_sheet`). `save=True` on an unsaved Untitled document will raise `NumbersError` — Numbers requires a file path to save to.
 - `create_document` uses `make new document with properties {name:"…"}` (or without properties when no name is given). Numbers assigns "Untitled N" automatically. The document is in-memory only until saved.
 - `_run(script)` — executes via `osascript -e`, raises `NumbersError` on non-zero exit.
 - `_as_value(v)` — converts a Python value to an AppleScript literal: `int`/`float` → bare number (numeric cell), `str` → quoted string (text cell), `None`/`""` → `""` (clears cell). `bool` is checked before `int` to avoid Python's bool-is-int subclass coercion.
