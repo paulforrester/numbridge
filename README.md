@@ -1,6 +1,6 @@
 # NumBridge
 
-NumBridge lets Claude read and write Apple Numbers spreadsheets. It runs as a menu-bar app that keeps a local MCP server alive in the background, so Claude Desktop and Claude Code can interact with any open Numbers document.
+NumBridge lets Claude read, write, and manage Apple Numbers spreadsheets. It runs as a menu-bar app that keeps a local MCP server alive in the background, so Claude Desktop and Claude Code can interact with Numbers documents — opening, creating, reading, writing, formatting, sorting, and managing sheets.
 
 ## Requirements
 
@@ -48,20 +48,40 @@ Replace `/Users/YOUR_USERNAME/.local/bin/uv` with the output of `which uv`, and 
 
 Claude navigates Numbers documents through a four-level hierarchy: **document → sheet → table → cells**. All row and column indices are 1-based.
 
+### Document management
+
 | Tool | Description |
 |------|-------------|
 | `list_documents` | Names of all currently open Numbers documents |
+| `open_document` | Open a `.numbers` file by absolute POSIX path; returns the document name |
+| `close_document` | Close an open document (optionally save before closing) |
+| `create_document` | Create a new blank in-memory document; returns the assigned name |
+
+### Sheet management
+
+| Tool | Description |
+|------|-------------|
 | `list_sheets` | Sheet names in a document |
+| `add_sheet` | Add a new blank sheet to a document |
+| `delete_sheet` | Delete a sheet (errors if the sheet doesn't exist) |
+| `rename_sheet` | Rename a sheet (errors if the old name doesn't exist or new name is taken) |
+
+### Reading data
+
+| Tool | Description |
+|------|-------------|
 | `list_tables` | Table names in a sheet |
 | `get_cell` | Read one cell (returns the displayed value) |
 | `get_range` | Read a rectangular block of cells (max 1 000) |
 | `get_sheet_as_table` | Read the entire used range of a table (max 2 000 cells) |
+
+### Writing data
+
+| Tool | Description |
+|------|-------------|
 | `set_cell` | Write one cell — pass a number, string, or null to clear |
 | `set_range` | Write a block of cells in one call (max 1 000) |
 | `sort_table` | Sort table rows by a column (ascending or descending) |
-| `add_sheet` | Add a new blank sheet to a document |
-| `delete_sheet` | Delete a sheet (errors if the sheet doesn't exist) |
-| `rename_sheet` | Rename a sheet (errors if the old name doesn't exist or new name is taken) |
 
 ## Usage
 
