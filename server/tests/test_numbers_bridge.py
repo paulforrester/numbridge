@@ -21,12 +21,19 @@ from numbridge.numbers_bridge import (
     close_document,
     create_document,
     delete_sheet,
+    get_cell_format,
+    get_column_width,
     get_range,
+    get_row_height,
     get_sheet_as_table,
     open_document,
     rename_sheet,
     resize_table,
+    set_column_format,
+    set_column_width,
     set_range,
+    set_row_format,
+    set_row_height,
     sort_table,
 )
 
@@ -348,6 +355,219 @@ class TestGetSheetAsTable:
                    return_value=_make_completed(stderr="Numbers not running", returncode=1)):
             with pytest.raises(NumbersError):
                 get_sheet_as_table("doc", "sheet", "table")
+
+
+# ---------------------------------------------------------------------------
+# get_column_width / set_column_width
+# ---------------------------------------------------------------------------
+
+class TestGetColumnWidth:
+    def test_returns_float(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="98.0")):
+            assert get_column_width("doc", "Sheet 1", "Table 1", 2) == 98.0
+
+    def test_raises_for_zero_column(self):
+        with pytest.raises(ValueError, match="column"):
+            get_column_width("doc", "Sheet 1", "Table 1", 0)
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                get_column_width("doc", "Sheet 1", "Table 1", 1)
+
+
+class TestSetColumnWidth:
+    def test_returns_confirmation(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()):
+            result = set_column_width("doc", "Sheet 1", "Table 1", 3, 120.0)
+        assert "120" in result and "3" in result
+
+    def test_raises_for_zero_column(self):
+        with pytest.raises(ValueError, match="column"):
+            set_column_width("doc", "Sheet 1", "Table 1", 0, 100)
+
+    def test_raises_for_zero_width(self):
+        with pytest.raises(ValueError, match="width"):
+            set_column_width("doc", "Sheet 1", "Table 1", 1, 0)
+
+    def test_script_sets_width(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            set_column_width("doc", "Sheet 1", "Table 1", 2, 150.0)
+            script = mock.call_args[0][0][2]
+        assert "set width of column 2 to 150.0" in script
+
+
+# ---------------------------------------------------------------------------
+# get_row_height / set_row_height
+# ---------------------------------------------------------------------------
+
+class TestGetRowHeight:
+    def test_returns_float(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="20.0")):
+            assert get_row_height("doc", "Sheet 1", "Table 1", 1) == 20.0
+
+    def test_raises_for_zero_row(self):
+        with pytest.raises(ValueError, match="row"):
+            get_row_height("doc", "Sheet 1", "Table 1", 0)
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                get_row_height("doc", "Sheet 1", "Table 1", 1)
+
+
+class TestSetRowHeight:
+    def test_returns_confirmation(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()):
+            result = set_row_height("doc", "Sheet 1", "Table 1", 2, 40.0)
+        assert "40" in result and "2" in result
+
+    def test_raises_for_zero_row(self):
+        with pytest.raises(ValueError, match="row"):
+            set_row_height("doc", "Sheet 1", "Table 1", 0, 30)
+
+    def test_raises_for_zero_height(self):
+        with pytest.raises(ValueError, match="height"):
+            set_row_height("doc", "Sheet 1", "Table 1", 1, 0)
+
+    def test_script_sets_height(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            set_row_height("doc", "Sheet 1", "Table 1", 3, 30.0)
+            script = mock.call_args[0][0][2]
+        assert "set height of row 3 to 30.0" in script
+
+
+# ---------------------------------------------------------------------------
+# get_cell_format
+# ---------------------------------------------------------------------------
+
+class TestGetCellFormat:
+    def test_returns_dict_with_expected_keys(self):
+        payload = "HelveticaNeue-Bold||14.0||left||automatic"
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout=payload)):
+            result = get_cell_format("doc", "Sheet 1", "Table 1", 1, 1)
+        assert result["font_name"] == "HelveticaNeue-Bold"
+        assert result["font_size"] == 14.0
+        assert result["bold"] is True
+        assert result["italic"] is False
+        assert result["alignment"] == "left"
+        assert result["number_format"] == "automatic"
+
+    def test_bold_italic_both_detected(self):
+        payload = "HelveticaNeue-BoldItalic||12.0||center||number"
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout=payload)):
+            result = get_cell_format("doc", "Sheet 1", "Table 1", 2, 3)
+        assert result["bold"] is True
+        assert result["italic"] is True
+
+    def test_plain_font_is_not_bold_or_italic(self):
+        payload = "HelveticaNeue||12.0||right||text"
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout=payload)):
+            result = get_cell_format("doc", "Sheet 1", "Table 1", 1, 2)
+        assert result["bold"] is False
+        assert result["italic"] is False
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                get_cell_format("doc", "Sheet 1", "Table 1", 1, 1)
+
+
+# ---------------------------------------------------------------------------
+# set_row_format
+# ---------------------------------------------------------------------------
+
+class TestSetRowFormat:
+    def test_raises_for_zero_row(self):
+        with pytest.raises(ValueError, match="row"):
+            set_row_format("doc", "Sheet 1", "Table 1", 0, alignment="left")
+
+    def test_raises_for_invalid_alignment(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="3")):
+            with pytest.raises(ValueError, match="alignment"):
+                set_row_format("doc", "Sheet 1", "Table 1", 1, alignment="top")
+
+    def test_raises_for_invalid_number_format(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="3")):
+            with pytest.raises(ValueError, match="number_format"):
+                set_row_format("doc", "Sheet 1", "Table 1", 1, number_format="date")
+
+    def test_alignment_script_uses_cell_of_row_ref(self):
+        # First call returns column count; second call applies formatting
+        responses = [_make_completed(stdout="3"), _make_completed()]
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   side_effect=responses) as mock:
+            set_row_format("doc", "Sheet 1", "Table 1", 2, alignment="center")
+            apply_script = mock.call_args[0][0][2]
+        assert "cell 1 of row 2" in apply_script
+        assert "cell 3 of row 2" in apply_script
+        assert "alignment" in apply_script
+
+    def test_font_size_included_in_script(self):
+        responses = [_make_completed(stdout="2"), _make_completed()]
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   side_effect=responses) as mock:
+            set_row_format("doc", "Sheet 1", "Table 1", 1, font_size=16.0)
+            apply_script = mock.call_args[0][0][2]
+        assert "font size" in apply_script
+        assert "16.0" in apply_script
+
+    def test_nothing_to_format_returns_early(self):
+        with patch("numbridge.numbers_bridge.subprocess.run") as mock:
+            result = set_row_format("doc", "Sheet 1", "Table 1", 1)
+        assert "nothing" in result.lower()
+
+    def test_propagates_numbers_error_on_apply(self):
+        responses = [_make_completed(stdout="2"),
+                     _make_completed(stderr="err", returncode=1)]
+        with patch("numbridge.numbers_bridge.subprocess.run", side_effect=responses):
+            with pytest.raises(NumbersError):
+                set_row_format("doc", "Sheet 1", "Table 1", 1, alignment="left")
+
+
+# ---------------------------------------------------------------------------
+# set_column_format
+# ---------------------------------------------------------------------------
+
+class TestSetColumnFormat:
+    def test_raises_for_zero_column(self):
+        with pytest.raises(ValueError, match="column"):
+            set_column_format("doc", "Sheet 1", "Table 1", 0, alignment="left")
+
+    def test_alignment_script_uses_cell_of_row_ref(self):
+        responses = [_make_completed(stdout="3"), _make_completed()]
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   side_effect=responses) as mock:
+            set_column_format("doc", "Sheet 1", "Table 1", 2, alignment="right")
+            apply_script = mock.call_args[0][0][2]
+        assert "cell 2 of row 1" in apply_script
+        assert "cell 2 of row 3" in apply_script
+
+    def test_nothing_to_format_returns_early(self):
+        with patch("numbridge.numbers_bridge.subprocess.run") as mock:
+            result = set_column_format("doc", "Sheet 1", "Table 1", 1)
+        assert "nothing" in result.lower()
+
+    def test_propagates_numbers_error(self):
+        responses = [_make_completed(stdout="2"),
+                     _make_completed(stderr="err", returncode=1)]
+        with patch("numbridge.numbers_bridge.subprocess.run", side_effect=responses):
+            with pytest.raises(NumbersError):
+                set_column_format("doc", "Sheet 1", "Table 1", 1, font_size=12.0)
 
 
 # ---------------------------------------------------------------------------

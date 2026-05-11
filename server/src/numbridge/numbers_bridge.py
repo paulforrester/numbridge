@@ -139,6 +139,7 @@ def _fmt_stmts(
     number_format: str | None,
     alignment: str | None,
     new_font: str | None,
+    font_size: float | None = None,
 ) -> list[str]:
     """Return AppleScript statements for the requested format changes on *addr*."""
     stmts: list[str] = []
@@ -148,6 +149,8 @@ def _fmt_stmts(
         stmts.append(f'set alignment of cell "{addr}" to {_ALIGNMENT_MAP[alignment]}')
     if new_font is not None:
         stmts.append(f'set font name of cell "{addr}" to "{_q(new_font)}"')
+    if font_size is not None:
+        stmts.append(f'set font size of cell "{addr}" to {font_size}')
     return stmts
 
 
@@ -490,6 +493,7 @@ def set_cell(
     bold: bool | None = None,
     italic: bool | None = None,
     alignment: str | None = None,
+    font_size: float | None = None,
 ) -> None:
     """Write a single cell value with optional formatting.
 
@@ -501,6 +505,7 @@ def set_cell(
       bold            True / False
       italic          True / False
       alignment       "left" | "center" | "right"
+      font_size       point size (e.g. 12.0)
 
     Note: decimal_places and currency_symbol are accepted for API compatibility
     but have no effect — Numbers' scripting API does not expose these properties.
@@ -538,7 +543,7 @@ def set_cell(
 
     stmts = (
         [f'set value of cell "{addr}" to {_as_value(value)}']
-        + _fmt_stmts(addr, number_format, alignment, new_font)
+        + _fmt_stmts(addr, number_format, alignment, new_font, font_size)
     )
     body = "\n                ".join(stmts)
     _run(
@@ -568,6 +573,7 @@ def set_range(
     bold: bool | None = None,
     italic: bool | None = None,
     alignment: str | None = None,
+    font_size: float | None = None,
 ) -> None:
     """Write a rectangular block of cells with optional formatting.
 
@@ -582,6 +588,7 @@ def set_range(
       bold            True / False
       italic          True / False
       alignment       "left" | "center" | "right"
+      font_size       point size (e.g. 12.0)
 
     Note: decimal_places and currency_symbol are accepted for API compatibility
     but have no effect — Numbers' scripting API does not expose these properties.
@@ -660,7 +667,7 @@ end tell"""
                 ) else ""
                 if current_font:
                     new_font = _apply_bold_italic(current_font, bold, italic)
-            stmts.extend(_fmt_stmts(addr, number_format, alignment, new_font))
+            stmts.extend(_fmt_stmts(addr, number_format, alignment, new_font, font_size))
 
     body = "\n                ".join(stmts)
     script = (
@@ -721,6 +728,395 @@ def resize_table(
         f'end tell'
     )
     return f"Table {table!r} resized to {num_rows} rows × {num_columns} columns"
+
+
+def get_column_width(document: str, sheet: str, table: str, column: int) -> float:
+    """Return the width of *column* in points.
+
+    Column is 1-indexed.  Raises ValueError for non-positive column numbers.
+    """
+    if column < 1:
+        raise ValueError(f"column must be >= 1; got {column}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    return float(_run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                return width of column {column}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    ))
+
+
+def set_column_width(document: str, sheet: str, table: str, column: int, width: float) -> str:
+    """Set the width of *column* to *width* points.
+
+    Column is 1-indexed.  Raises ValueError for non-positive column or width.
+    """
+    if column < 1:
+        raise ValueError(f"column must be >= 1; got {column}")
+    if width <= 0:
+        raise ValueError(f"width must be > 0; got {width}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set width of column {column} to {width}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Column {column} width set to {width} pt in table {table!r}"
+
+
+def get_row_height(document: str, sheet: str, table: str, row: int) -> float:
+    """Return the height of *row* in points.
+
+    Row is 1-indexed.  Raises ValueError for non-positive row numbers.
+    """
+    if row < 1:
+        raise ValueError(f"row must be >= 1; got {row}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    return float(_run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                return height of row {row}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    ))
+
+
+def set_row_height(document: str, sheet: str, table: str, row: int, height: float) -> str:
+    """Set the height of *row* to *height* points.
+
+    Row is 1-indexed.  Raises ValueError for non-positive row or height.
+    """
+    if row < 1:
+        raise ValueError(f"row must be >= 1; got {row}")
+    if height <= 0:
+        raise ValueError(f"height must be > 0; got {height}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set height of row {row} to {height}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Row {row} height set to {height} pt in table {table!r}"
+
+
+def get_cell_format(
+    document: str, sheet: str, table: str, row: int, column: int
+) -> dict:
+    """Return formatting properties of a single cell.
+
+    Returns a dict with keys:
+      font_name     PostScript font name (e.g. "HelveticaNeue-Bold")
+      font_size     point size as a float
+      bold          True / False (derived from font name)
+      italic        True / False (derived from font name)
+      alignment     string as reported by Numbers (e.g. "left", "center", "right")
+      number_format string as reported by Numbers (e.g. "automatic", "number", "currency")
+    """
+    doc  = _q(document)
+    sht  = _q(sheet)
+    tbl  = _q(table)
+    addr = f"{_col_letter(column)}{row}"
+    raw = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set fn to font name of cell "{addr}"\n'
+        f'                set fs to font size of cell "{addr}"\n'
+        f'                set al to alignment of cell "{addr}" as text\n'
+        f'                set fmt to format of cell "{addr}" as text\n'
+        f'                return fn & "||" & (fs as text) & "||" & al & "||" & fmt\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    parts = raw.split("||")
+    font_name     = parts[0] if len(parts) > 0 else ""
+    font_size     = float(parts[1]) if len(parts) > 1 else 0.0
+    alignment     = parts[2] if len(parts) > 2 else ""
+    number_format = parts[3] if len(parts) > 3 else ""
+    style_lc = (font_name.rsplit("-", 1)[1] if "-" in font_name else "").lower()
+    return {
+        "font_name":     font_name,
+        "font_size":     font_size,
+        "bold":          any(t in style_lc for t in _BOLD_TOKENS),
+        "italic":        any(t in style_lc for t in _ITALIC_TOKENS),
+        "alignment":     alignment,
+        "number_format": number_format,
+    }
+
+
+def _get_count_and_fonts(
+    doc: str, sht: str, tbl: str, row: int | None, column: int | None
+) -> tuple[int, list[str]]:
+    """Return (count, font_names) for a whole row or column.
+
+    Pass *row* (row number, 1-based) to iterate over columns in that row.
+    Pass *column* (column number, 1-based) to iterate over rows in that column.
+    Exactly one of row/column must be non-None.
+    """
+    if row is not None:
+        script = f"""tell application "Numbers"
+    tell document "{doc}"
+        tell sheet "{sht}"
+            tell table "{tbl}"
+                set cc to column count
+                set fonts to {{}}
+                repeat with c from 1 to cc
+                    set end of fonts to (font name of cell c of row {row})
+                end repeat
+                set AppleScript's text item delimiters to tab
+                return (cc as text) & linefeed & (fonts as text)
+            end tell
+        end tell
+    end tell
+end tell"""
+    else:
+        script = f"""tell application "Numbers"
+    tell document "{doc}"
+        tell sheet "{sht}"
+            tell table "{tbl}"
+                set rc to row count
+                set fonts to {{}}
+                repeat with r from 1 to rc
+                    set end of fonts to (font name of cell {column} of row r)
+                end repeat
+                set AppleScript's text item delimiters to tab
+                return (rc as text) & linefeed & (fonts as text)
+            end tell
+        end tell
+    end tell
+end tell"""
+
+    raw = subprocess.run(
+        ["osascript", "-e", script],
+        capture_output=True, text=True, timeout=_RANGE_TIMEOUT,
+    )
+    if raw.returncode != 0:
+        raise NumbersError(raw.stderr.strip() or f"osascript exited with code {raw.returncode}")
+    lines = raw.stdout.strip().split("\n")
+    count      = int(lines[0])
+    font_names = lines[1].split("\t") if len(lines) > 1 and lines[1] else []
+    return count, font_names
+
+
+def _get_count(doc: str, sht: str, tbl: str, dimension: str) -> int:
+    """Return row count or column count for the table."""
+    return int(_run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                return {dimension} count\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    ))
+
+
+def set_row_format(
+    document: str,
+    sheet: str,
+    table: str,
+    row: int,
+    *,
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
+    number_format: str | None = None,
+    font_size: float | None = None,
+) -> str:
+    """Apply formatting to every cell in *row*.
+
+    All formatting parameters are optional — omit to leave that property unchanged.
+    Applies to the full width of the table (all columns).
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        row: 1-indexed row number.
+        bold: True / False.
+        italic: True / False.
+        alignment: "left" | "center" | "right".
+        number_format: "currency" | "number" | "percentage" | "text".
+        font_size: Point size (e.g. 14.0).
+    """
+    if row < 1:
+        raise ValueError(f"row must be >= 1; got {row}")
+    if bold is None and italic is None and alignment is None and number_format is None and font_size is None:
+        return f"Row {row} — nothing to format"
+    if number_format is not None and number_format not in _NUMBER_FORMAT_MAP:
+        raise ValueError(
+            f"number_format must be one of {list(_NUMBER_FORMAT_MAP)}; got {number_format!r}"
+        )
+    if alignment is not None and alignment not in _ALIGNMENT_MAP:
+        raise ValueError(
+            f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+
+    if bold is not None or italic is not None:
+        col_count, font_names = _get_count_and_fonts(doc, sht, tbl, row=row, column=None)
+    else:
+        col_count  = _get_count(doc, sht, tbl, "column")
+        font_names = []
+
+    stmts: list[str] = []
+    for c in range(1, col_count + 1):
+        ref = f"cell {c} of row {row}"
+        new_font: str | None = None
+        if bold is not None or italic is not None:
+            current = font_names[c - 1] if c - 1 < len(font_names) else ""
+            if current:
+                new_font = _apply_bold_italic(current, bold, italic)
+        if new_font is not None:
+            stmts.append(f'set font name of {ref} to "{_q(new_font)}"')
+        if number_format is not None:
+            stmts.append(f'set format of {ref} to {_NUMBER_FORMAT_MAP[number_format]}')
+        if alignment is not None:
+            stmts.append(f'set alignment of {ref} to {_ALIGNMENT_MAP[alignment]}')
+        if font_size is not None:
+            stmts.append(f'set font size of {ref} to {font_size}')
+
+    body = "\n                ".join(stmts)
+    result = subprocess.run(
+        ["osascript", "-e",
+         f'tell application "Numbers"\n'
+         f'    tell document "{doc}"\n'
+         f'        tell sheet "{sht}"\n'
+         f'            tell table "{tbl}"\n'
+         f'                {body}\n'
+         f'            end tell\n'
+         f'        end tell\n'
+         f'    end tell\n'
+         f'end tell'],
+        capture_output=True, text=True, timeout=_RANGE_TIMEOUT,
+    )
+    if result.returncode != 0:
+        raise NumbersError(result.stderr.strip() or f"osascript exited with code {result.returncode}")
+    return f"Row {row} formatted in table {table!r}"
+
+
+def set_column_format(
+    document: str,
+    sheet: str,
+    table: str,
+    column: int,
+    *,
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
+    number_format: str | None = None,
+    font_size: float | None = None,
+) -> str:
+    """Apply formatting to every cell in *column*.
+
+    All formatting parameters are optional — omit to leave that property unchanged.
+    Applies to the full height of the table (all rows).
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        column: 1-indexed column number.
+        bold: True / False.
+        italic: True / False.
+        alignment: "left" | "center" | "right".
+        number_format: "currency" | "number" | "percentage" | "text".
+        font_size: Point size (e.g. 14.0).
+    """
+    if column < 1:
+        raise ValueError(f"column must be >= 1; got {column}")
+    if bold is None and italic is None and alignment is None and number_format is None and font_size is None:
+        return f"Column {column} — nothing to format"
+    if number_format is not None and number_format not in _NUMBER_FORMAT_MAP:
+        raise ValueError(
+            f"number_format must be one of {list(_NUMBER_FORMAT_MAP)}; got {number_format!r}"
+        )
+    if alignment is not None and alignment not in _ALIGNMENT_MAP:
+        raise ValueError(
+            f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+
+    if bold is not None or italic is not None:
+        row_count, font_names = _get_count_and_fonts(doc, sht, tbl, row=None, column=column)
+    else:
+        row_count  = _get_count(doc, sht, tbl, "row")
+        font_names = []
+
+    stmts: list[str] = []
+    for r in range(1, row_count + 1):
+        ref = f"cell {column} of row {r}"
+        new_font: str | None = None
+        if bold is not None or italic is not None:
+            current = font_names[r - 1] if r - 1 < len(font_names) else ""
+            if current:
+                new_font = _apply_bold_italic(current, bold, italic)
+        if new_font is not None:
+            stmts.append(f'set font name of {ref} to "{_q(new_font)}"')
+        if number_format is not None:
+            stmts.append(f'set format of {ref} to {_NUMBER_FORMAT_MAP[number_format]}')
+        if alignment is not None:
+            stmts.append(f'set alignment of {ref} to {_ALIGNMENT_MAP[alignment]}')
+        if font_size is not None:
+            stmts.append(f'set font size of {ref} to {font_size}')
+
+    body = "\n                ".join(stmts)
+    result = subprocess.run(
+        ["osascript", "-e",
+         f'tell application "Numbers"\n'
+         f'    tell document "{doc}"\n'
+         f'        tell sheet "{sht}"\n'
+         f'            tell table "{tbl}"\n'
+         f'                {body}\n'
+         f'            end tell\n'
+         f'        end tell\n'
+         f'    end tell\n'
+         f'end tell'],
+        capture_output=True, text=True, timeout=_RANGE_TIMEOUT,
+    )
+    if result.returncode != 0:
+        raise NumbersError(result.stderr.strip() or f"osascript exited with code {result.returncode}")
+    return f"Column {column} formatted in table {table!r}"
 
 
 def sort_table(

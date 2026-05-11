@@ -199,6 +199,7 @@ def set_cell(
     bold: bool | None = None,
     italic: bool | None = None,
     alignment: str | None = None,
+    font_size: float | None = None,
 ) -> None:
     """Write a value to a single cell with optional formatting.
 
@@ -219,6 +220,7 @@ def set_cell(
         bold: True to make the cell bold, False to remove bold.
         italic: True to make the cell italic, False to remove italic.
         alignment: "left", "center", or "right".
+        font_size: Point size (e.g. 14.0).
     """
     numbers_bridge.set_cell(
         document, sheet, table, row, column, value,
@@ -228,6 +230,7 @@ def set_cell(
         bold=bold,
         italic=italic,
         alignment=alignment,
+        font_size=font_size,
     )
 
 
@@ -245,6 +248,7 @@ def set_range(
     bold: bool | None = None,
     italic: bool | None = None,
     alignment: str | None = None,
+    font_size: float | None = None,
 ) -> None:
     """Write a rectangular block of cells with optional formatting.
 
@@ -267,6 +271,7 @@ def set_range(
         bold: True to make cells bold, False to remove bold.
         italic: True to make cells italic, False to remove italic.
         alignment: "left", "center", or "right".
+        font_size: Point size (e.g. 14.0).
     """
     numbers_bridge.set_range(
         document, sheet, table, start_row, start_col, values,
@@ -276,6 +281,7 @@ def set_range(
         bold=bold,
         italic=italic,
         alignment=alignment,
+        font_size=font_size,
     )
 
 
@@ -302,6 +308,151 @@ def resize_table(
         num_columns: Desired total number of columns (including any header column).
     """
     return numbers_bridge.resize_table(document, sheet, table, num_rows, num_columns)
+
+
+@mcp.tool()
+def get_column_width(document: str, sheet: str, table: str, column: int) -> float:
+    """Return the width of a column in points.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        column: 1-indexed column number.
+    """
+    return numbers_bridge.get_column_width(document, sheet, table, column)
+
+
+@mcp.tool()
+def set_column_width(
+    document: str, sheet: str, table: str, column: int, width: float
+) -> str:
+    """Set the width of a column in points.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        column: 1-indexed column number.
+        width: Desired column width in points (must be > 0).
+    """
+    return numbers_bridge.set_column_width(document, sheet, table, column, width)
+
+
+@mcp.tool()
+def get_row_height(document: str, sheet: str, table: str, row: int) -> float:
+    """Return the height of a row in points.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        row: 1-indexed row number.
+    """
+    return numbers_bridge.get_row_height(document, sheet, table, row)
+
+
+@mcp.tool()
+def set_row_height(
+    document: str, sheet: str, table: str, row: int, height: float
+) -> str:
+    """Set the height of a row in points.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        row: 1-indexed row number.
+        height: Desired row height in points (must be > 0).
+    """
+    return numbers_bridge.set_row_height(document, sheet, table, row, height)
+
+
+@mcp.tool()
+def get_cell_format(
+    document: str, sheet: str, table: str, row: int, column: int
+) -> dict:
+    """Return the formatting properties of a single cell.
+
+    Returns a dict with keys: font_name, font_size, bold, italic,
+    alignment, number_format.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        row: 1-indexed row number.
+        column: 1-indexed column number.
+    """
+    return numbers_bridge.get_cell_format(document, sheet, table, row, column)
+
+
+@mcp.tool()
+def set_row_format(
+    document: str,
+    sheet: str,
+    table: str,
+    row: int,
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
+    number_format: str | None = None,
+    font_size: float | None = None,
+) -> str:
+    """Apply formatting to every cell in a row.
+
+    All formatting parameters are optional. Applies to the full width of the table.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        row: 1-indexed row number.
+        bold: True to bold, False to remove bold.
+        italic: True to italicise, False to remove italic.
+        alignment: "left", "center", or "right".
+        number_format: "currency", "number", "percentage", or "text".
+        font_size: Point size (e.g. 14.0).
+    """
+    return numbers_bridge.set_row_format(
+        document, sheet, table, row,
+        bold=bold, italic=italic, alignment=alignment,
+        number_format=number_format, font_size=font_size,
+    )
+
+
+@mcp.tool()
+def set_column_format(
+    document: str,
+    sheet: str,
+    table: str,
+    column: int,
+    bold: bool | None = None,
+    italic: bool | None = None,
+    alignment: str | None = None,
+    number_format: str | None = None,
+    font_size: float | None = None,
+) -> str:
+    """Apply formatting to every cell in a column.
+
+    All formatting parameters are optional. Applies to the full height of the table.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        column: 1-indexed column number.
+        bold: True to bold, False to remove bold.
+        italic: True to italicise, False to remove italic.
+        alignment: "left", "center", or "right".
+        number_format: "currency", "number", "percentage", or "text".
+        font_size: Point size (e.g. 14.0).
+    """
+    return numbers_bridge.set_column_format(
+        document, sheet, table, column,
+        bold=bold, italic=italic, alignment=alignment,
+        number_format=number_format, font_size=font_size,
+    )
 
 
 @mcp.tool()

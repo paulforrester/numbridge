@@ -75,14 +75,31 @@ Claude navigates Numbers documents through a four-level hierarchy: **document �
 | `get_range` | Read a rectangular block of cells (max 1 000) |
 | `get_sheet_as_table` | Read the entire used range of a table (max 2 000 cells) |
 
+### Reading formats
+
+| Tool | Description |
+|------|-------------|
+| `get_cell_format` | Query bold, italic, font name, font size, alignment, and number format of a cell |
+| `get_column_width` | Column width in points |
+| `get_row_height` | Row height in points |
+
 ### Writing data
 
 | Tool | Description |
 |------|-------------|
 | `resize_table` | Set a table's row and column count (call before writing beyond the default 4-column boundary) |
-| `set_cell` | Write one cell — pass a number, string, or null to clear |
-| `set_range` | Write a block of cells in one call (max 1 000) |
+| `set_cell` | Write one cell — pass a number, string, or null to clear; supports bold, italic, alignment, font size, number format |
+| `set_range` | Write a block of cells in one call (max 1 000); same formatting options as set_cell |
 | `sort_table` | Sort table rows by a column (ascending or descending) |
+
+### Writing formats
+
+| Tool | Description |
+|------|-------------|
+| `set_column_format` | Apply bold, italic, alignment, font size, or number format to every cell in a column |
+| `set_row_format` | Apply bold, italic, alignment, font size, or number format to every cell in a row |
+| `set_column_width` | Set column width in points |
+| `set_row_height` | Set row height in points |
 
 ## Usage
 

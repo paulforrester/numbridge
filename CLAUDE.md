@@ -90,9 +90,16 @@ uv run pytest
 | `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
 | `get_cell` | `(document, sheet, table, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
 | `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
-| `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
-| `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
+| `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, font_size, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
+| `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, font_size, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
 | `resize_table` | `(document, sheet, table, num_rows, num_columns) → str` | Set row and column count; call before writing beyond the default 4-column boundary (-10006) |
+| `get_column_width` | `(document, sheet, table, column) → float` | Column width in points |
+| `set_column_width` | `(document, sheet, table, column, width) → str` | Set column width in points |
+| `get_row_height` | `(document, sheet, table, row) → float` | Row height in points |
+| `set_row_height` | `(document, sheet, table, row, height) → str` | Set row height in points |
+| `get_cell_format` | `(document, sheet, table, row, column) → dict` | Returns font_name, font_size, bold, italic, alignment, number_format |
+| `set_row_format` | `(document, sheet, table, row, *, bold, italic, alignment, number_format, font_size) → str` | Apply formatting to all cells in a row |
+| `set_column_format` | `(document, sheet, table, column, *, bold, italic, alignment, number_format, font_size) → str` | Apply formatting to all cells in a column |
 | `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
 | `add_sheet` | `(document, sheet_name) → str` | Add a new blank sheet; errors if name already exists |
 | `delete_sheet` | `(document, sheet_name) → str` | Delete a sheet; errors if not found |
@@ -119,6 +126,10 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `add_sheet` / `delete_sheet` / `rename_sheet` use standard AppleScript `make` / `delete` / `set name of` on sheet objects. Each does an existence check inside the same osascript call (returning sentinel strings `"OK"` / `"EXISTS"` / `"NOT_FOUND"` / `"NEW_EXISTS"`) to avoid a separate round-trip. Numbers inserts new sheets after the currently active sheet regardless of the `at end of sheets` location specifier.
 - `delete_sheet` separates the existence-check loop from the `delete` call — using `delete sheet "name"` **after** the loop rather than `delete s` **inside** it. Deleting `s` while iterating `repeat with s in sheets` triggers AppleScript `-1728` ("Can't get item N of every sheet of document"). This applies to any destructive mutation of a collection mid-iteration in AppleScript.
 - `resize_table` sets `row count` and `column count` directly on the table object (`set row count to N`). New documents default to 4 columns — writing beyond the current boundary raises AppleScript `-10006`. Always call `resize_table` before `set_cell` / `set_range` when targeting columns 5+.
+- `get_column_width` / `set_column_width` use `width of column N` inside `tell table`. Similarly `get_row_height` / `set_row_height` use `height of row N`.
+- `get_cell_format` reads `font name`, `font size`, `alignment as text`, and `format as text` in a single osascript call, serialized with `"||"` delimiter. Bold/italic are derived by parsing the PostScript font-name suffix (same logic as `set_cell`). Alignment and number_format are returned as raw Numbers strings (e.g. `"left"`, `"automatic"`, `"number"`).
+- `set_row_format` / `set_column_format` — use `cell N of row R` (index-based, not address-based) for the inner loop, since the column/row count is queried at runtime. Both short-circuit immediately (no subprocess call) when all formatting params are None. Bold/italic uses the same two-step pattern as `set_range`: first query all font names in the row/column, compute new names in Python, then apply in a single osascript call. `_get_count_and_fonts` is a shared internal helper that returns `(count, [font_names])` in one round-trip.
+- `font_size` is now a parameter of `set_cell`, `set_range`, `set_row_format`, and `set_column_format`. Implemented via `set font size of cell "X" to N`. Also exposed via `_fmt_stmts`.
 - `duplicate_sheet` is **not implementable** — Numbers returns `"Sheets can not be copied" (-1717)` for any `duplicate`/`copy` operation on sheets, in both AppleScript and JXA.
 
 ## Key constraints
