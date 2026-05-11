@@ -161,7 +161,7 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `duplicate_sheet` — Numbers returns `"Sheets can not be copied" (-1717)` for any `duplicate`/`copy` on sheets, in both AppleScript and JXA.
 - `decimal_places` / `currency_symbol` — not properties of the `range`/`cell` class in the scripting dictionary; accepted but silently ignored.
 - `date` number format — the `date and time` enum value collides with AppleScript's built-in `date` type and cannot be set via plain-text osascript.
-- Writing formulas — `formula` is a read-only property in the SDEF.
+- Writing formulas via the `formula` property — it is read-only in the SDEF. **Workaround:** pass the formula string as the cell value (e.g. `"=SUM(A1:A5)"`); Numbers interprets any value string starting with `=` as a formula, identical to typing in the UI.
 - Sub-range transpose — `transpose` takes a table, not a range; the range object returns `-1708` for this verb.
 - Password management — `set password` / `remove password` are in the SDEF but excluded for security; there is no interactive confirmation mechanism.
 - Canvas objects (images, shapes, text boxes) — the iWork canvas model is out of scope for tabular data access.
