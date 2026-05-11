@@ -66,20 +66,39 @@ Claude navigates Numbers documents through a four-level hierarchy: **document â†
 | `delete_sheet` | Delete a sheet (errors if the sheet doesn't exist) |
 | `rename_sheet` | Rename a sheet (errors if the old name doesn't exist or new name is taken) |
 
-### Reading data
+### Table management
 
 | Tool | Description |
 |------|-------------|
 | `list_tables` | Table names in a sheet |
+| `rename_table` | Rename a table within a sheet |
+| `get_table_info` | Row/column counts and header/footer counts for a table |
+| `set_table_headers` | Set the number of header rows, header columns, and footer rows |
+| `get_table_layout` | Position (x, y) and size (width, height) of a table on the canvas |
+| `set_table_layout` | Move or resize a table on the canvas |
+| `set_table_locked` | Lock or unlock a table (locked tables can't be moved or resized) |
+| `resize_table` | Set a table's row and column count (call before writing beyond the default 4-column boundary) |
+| `insert_row` | Insert a blank row before the specified row |
+| `insert_column` | Insert a blank column before the specified column |
+| `remove_row` | Remove a row from a table |
+| `remove_column` | Remove a column from a table |
+| `sort_table` | Sort table rows by a column (ascending or descending) |
+| `transpose_table` | Transpose the entire table (swap all rows and columns) |
+
+### Reading data
+
+| Tool | Description |
+|------|-------------|
 | `get_cell` | Read one cell (returns the displayed value) |
 | `get_range` | Read a rectangular block of cells (max 1 000) |
 | `get_sheet_as_table` | Read the entire used range of a table (max 2 000 cells) |
+| `get_cell_formula` | Read the formula string for a cell (null if no formula) |
 
 ### Reading formats
 
 | Tool | Description |
 |------|-------------|
-| `get_cell_format` | Query bold, italic, font name, font size, alignment, and number format of a cell |
+| `get_cell_format` | Query font, size, bold, italic, alignment, number format, text colour, background colour, text wrap, and vertical alignment |
 | `get_column_width` | Column width in points |
 | `get_row_height` | Row height in points |
 
@@ -87,17 +106,19 @@ Claude navigates Numbers documents through a four-level hierarchy: **document â†
 
 | Tool | Description |
 |------|-------------|
-| `resize_table` | Set a table's row and column count (call before writing beyond the default 4-column boundary) |
-| `set_cell` | Write one cell â€” pass a number, string, or null to clear; supports bold, italic, alignment, font size, number format |
-| `set_range` | Write a block of cells in one call (max 1 000); same formatting options as set_cell |
-| `sort_table` | Sort table rows by a column (ascending or descending) |
+| `set_cell` | Write one cell â€” pass a number, string, or null to clear; supports all formatting options |
+| `set_range` | Write a block of cells in one call (max 1 000); same formatting options as `set_cell` |
+| `merge_cells` | Merge a rectangular cell region into a single cell |
+| `unmerge_cells` | Unmerge a merged cell region |
+| `clear_range` | Clear content and formatting in a cell range (equivalent to Delete key) |
+| `export_document` | Export to `.numbers`, PDF, Excel (`.xlsx`), or CSV |
 
 ### Writing formats
 
 | Tool | Description |
 |------|-------------|
-| `set_column_format` | Apply bold, italic, alignment, font size, or number format to every cell in a column |
-| `set_row_format` | Apply bold, italic, alignment, font size, or number format to every cell in a row |
+| `set_column_format` | Apply bold, italic, alignment, font size, number format, colours, text wrap, or vertical alignment to every cell in a column |
+| `set_row_format` | Apply bold, italic, alignment, font size, number format, colours, text wrap, or vertical alignment to every cell in a row |
 | `set_column_width` | Set column width in points |
 | `set_row_height` | Set row height in points |
 

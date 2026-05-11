@@ -200,6 +200,10 @@ def set_cell(
     italic: bool | None = None,
     alignment: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> None:
     """Write a value to a single cell with optional formatting.
 
@@ -221,6 +225,10 @@ def set_cell(
         italic: True to make the cell italic, False to remove italic.
         alignment: "left", "center", or "right".
         font_size: Point size (e.g. 14.0).
+        text_color: [r, g, b] foreground colour with each component 0–255.
+        background_color: [r, g, b] fill colour with each component 0–255.
+        text_wrap: True to wrap text within the cell, False to clip.
+        vertical_alignment: "top", "center", or "bottom".
     """
     numbers_bridge.set_cell(
         document, sheet, table, row, column, value,
@@ -231,6 +239,10 @@ def set_cell(
         italic=italic,
         alignment=alignment,
         font_size=font_size,
+        text_color=text_color,
+        background_color=background_color,
+        text_wrap=text_wrap,
+        vertical_alignment=vertical_alignment,
     )
 
 
@@ -249,6 +261,10 @@ def set_range(
     italic: bool | None = None,
     alignment: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> None:
     """Write a rectangular block of cells with optional formatting.
 
@@ -272,6 +288,10 @@ def set_range(
         italic: True to make cells italic, False to remove italic.
         alignment: "left", "center", or "right".
         font_size: Point size (e.g. 14.0).
+        text_color: [r, g, b] foreground colour with each component 0–255.
+        background_color: [r, g, b] fill colour with each component 0–255.
+        text_wrap: True to wrap text within cells, False to clip.
+        vertical_alignment: "top", "center", or "bottom".
     """
     numbers_bridge.set_range(
         document, sheet, table, start_row, start_col, values,
@@ -282,6 +302,10 @@ def set_range(
         italic=italic,
         alignment=alignment,
         font_size=font_size,
+        text_color=text_color,
+        background_color=background_color,
+        text_wrap=text_wrap,
+        vertical_alignment=vertical_alignment,
     )
 
 
@@ -374,8 +398,9 @@ def get_cell_format(
 ) -> dict:
     """Return the formatting properties of a single cell.
 
-    Returns a dict with keys: font_name, font_size, bold, italic,
-    alignment, number_format.
+    Returns a dict with keys: font_name, font_size, bold, italic, alignment,
+    number_format, text_color ([r,g,b] or null), background_color ([r,g,b]
+    or null), text_wrap (bool), vertical_alignment.
 
     Args:
         document: Exact name of the open Numbers document.
@@ -398,6 +423,10 @@ def set_row_format(
     alignment: str | None = None,
     number_format: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> str:
     """Apply formatting to every cell in a row.
 
@@ -413,11 +442,17 @@ def set_row_format(
         alignment: "left", "center", or "right".
         number_format: "currency", "number", "percentage", or "text".
         font_size: Point size (e.g. 14.0).
+        text_color: [r, g, b] foreground colour with each component 0–255.
+        background_color: [r, g, b] fill colour with each component 0–255.
+        text_wrap: True to wrap text within cells, False to clip.
+        vertical_alignment: "top", "center", or "bottom".
     """
     return numbers_bridge.set_row_format(
         document, sheet, table, row,
         bold=bold, italic=italic, alignment=alignment,
         number_format=number_format, font_size=font_size,
+        text_color=text_color, background_color=background_color,
+        text_wrap=text_wrap, vertical_alignment=vertical_alignment,
     )
 
 
@@ -432,6 +467,10 @@ def set_column_format(
     alignment: str | None = None,
     number_format: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> str:
     """Apply formatting to every cell in a column.
 
@@ -447,11 +486,17 @@ def set_column_format(
         alignment: "left", "center", or "right".
         number_format: "currency", "number", "percentage", or "text".
         font_size: Point size (e.g. 14.0).
+        text_color: [r, g, b] foreground colour with each component 0–255.
+        background_color: [r, g, b] fill colour with each component 0–255.
+        text_wrap: True to wrap text within cells, False to clip.
+        vertical_alignment: "top", "center", or "bottom".
     """
     return numbers_bridge.set_column_format(
         document, sheet, table, column,
         bold=bold, italic=italic, alignment=alignment,
         number_format=number_format, font_size=font_size,
+        text_color=text_color, background_color=background_color,
+        text_wrap=text_wrap, vertical_alignment=vertical_alignment,
     )
 
 
@@ -493,6 +538,317 @@ def get_sheet_as_table(document: str, sheet: str, table: str) -> list[list[str]]
         table: Exact name of the table within the sheet.
     """
     return numbers_bridge.get_sheet_as_table(document, sheet, table)
+
+
+@mcp.tool()
+def get_cell_formula(
+    document: str, sheet: str, table: str, row: int, column: int
+) -> str | None:
+    """Return the formula string for a cell, or null if the cell has no formula.
+
+    Read-only — the Numbers scripting API does not support writing formulas.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        row: 1-indexed row number.
+        column: 1-indexed column number.
+    """
+    return numbers_bridge.get_cell_formula(document, sheet, table, row, column)
+
+
+@mcp.tool()
+def rename_table(document: str, sheet: str, old_name: str, new_name: str) -> str:
+    """Rename a table within a sheet.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet containing the table.
+        old_name: Current name of the table to rename. Must exist.
+        new_name: New name for the table. Must not already be in use.
+    """
+    return numbers_bridge.rename_table(document, sheet, old_name, new_name)
+
+
+@mcp.tool()
+def get_table_info(document: str, sheet: str, table: str) -> dict:
+    """Return structural metadata about a table.
+
+    Returns a dict with keys: name, row_count, column_count,
+    header_row_count, header_column_count, footer_row_count.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+    """
+    return numbers_bridge.get_table_info(document, sheet, table)
+
+
+@mcp.tool()
+def set_table_headers(
+    document: str,
+    sheet: str,
+    table: str,
+    header_rows: int | None = None,
+    header_columns: int | None = None,
+    footer_rows: int | None = None,
+) -> str:
+    """Set the number of header/footer rows and columns on a table.
+
+    All parameters are optional — omit to leave that count unchanged.
+    Numbers allows 0–5 header rows, 0–1 header columns, and 0–5 footer rows.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        header_rows: Number of header rows (0–5).
+        header_columns: Number of header columns (0–1).
+        footer_rows: Number of footer rows (0–5).
+    """
+    return numbers_bridge.set_table_headers(
+        document, sheet, table,
+        header_rows=header_rows,
+        header_columns=header_columns,
+        footer_rows=footer_rows,
+    )
+
+
+@mcp.tool()
+def get_table_layout(document: str, sheet: str, table: str) -> dict:
+    """Return the position and size of a table on its canvas.
+
+    Returns a dict with keys: x, y (position in points), width, height (in points).
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+    """
+    return numbers_bridge.get_table_layout(document, sheet, table)
+
+
+@mcp.tool()
+def set_table_layout(
+    document: str,
+    sheet: str,
+    table: str,
+    x: float | None = None,
+    y: float | None = None,
+    width: float | None = None,
+    height: float | None = None,
+) -> str:
+    """Set the position and/or size of a table on its canvas.
+
+    All parameters are optional — omit to leave that property unchanged.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        x: Horizontal offset in points from the left edge of the canvas.
+        y: Vertical offset in points from the top edge of the canvas.
+        width: Table width in points.
+        height: Table height in points.
+    """
+    return numbers_bridge.set_table_layout(
+        document, sheet, table, x=x, y=y, width=width, height=height
+    )
+
+
+@mcp.tool()
+def set_table_locked(document: str, sheet: str, table: str, locked: bool) -> str:
+    """Lock or unlock a table on its canvas.
+
+    Locked tables cannot be moved or resized in the Numbers UI.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        locked: True to lock, False to unlock.
+    """
+    return numbers_bridge.set_table_locked(document, sheet, table, locked)
+
+
+@mcp.tool()
+def insert_row(document: str, sheet: str, table: str, before_row: int) -> str:
+    """Insert a blank row before the specified row.
+
+    All rows at or below before_row shift down by one. Row is 1-indexed.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        before_row: 1-indexed row number. The new row is inserted above this row.
+    """
+    return numbers_bridge.insert_row(document, sheet, table, before_row)
+
+
+@mcp.tool()
+def insert_column(document: str, sheet: str, table: str, before_column: int) -> str:
+    """Insert a blank column before the specified column.
+
+    All columns at or to the right of before_column shift right. Column is 1-indexed.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        before_column: 1-indexed column number. The new column is inserted to the left.
+    """
+    return numbers_bridge.insert_column(document, sheet, table, before_column)
+
+
+@mcp.tool()
+def remove_row(document: str, sheet: str, table: str, row: int) -> str:
+    """Remove a row from a table (1-indexed).
+
+    All rows below the removed row shift up by one.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        row: 1-indexed row number to remove.
+    """
+    return numbers_bridge.remove_row(document, sheet, table, row)
+
+
+@mcp.tool()
+def remove_column(document: str, sheet: str, table: str, column: int) -> str:
+    """Remove a column from a table (1-indexed).
+
+    All columns to the right of the removed column shift left by one.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        column: 1-indexed column number to remove.
+    """
+    return numbers_bridge.remove_column(document, sheet, table, column)
+
+
+@mcp.tool()
+def merge_cells(
+    document: str,
+    sheet: str,
+    table: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> str:
+    """Merge a rectangular block of cells into a single merged cell.
+
+    Content in all cells except the top-left is discarded. Indices are 1-based.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        start_row: Top row of the merge region (1-indexed).
+        start_col: Left column of the merge region (1-indexed).
+        end_row: Bottom row of the merge region (inclusive).
+        end_col: Right column of the merge region (inclusive).
+    """
+    return numbers_bridge.merge_cells(
+        document, sheet, table, start_row, start_col, end_row, end_col
+    )
+
+
+@mcp.tool()
+def unmerge_cells(
+    document: str,
+    sheet: str,
+    table: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> str:
+    """Unmerge a previously-merged cell, restoring individual cells in the region.
+
+    Indices are 1-based.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        start_row: Top row of the region (1-indexed).
+        start_col: Left column of the region (1-indexed).
+        end_row: Bottom row of the region (inclusive).
+        end_col: Right column of the region (inclusive).
+    """
+    return numbers_bridge.unmerge_cells(
+        document, sheet, table, start_row, start_col, end_row, end_col
+    )
+
+
+@mcp.tool()
+def clear_range(
+    document: str,
+    sheet: str,
+    table: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> str:
+    """Clear the content of cells in a range without removing formatting.
+
+    Equivalent to selecting the cells and pressing Delete in the Numbers UI.
+    Indices are 1-based.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+        start_row: Top row of the range (1-indexed).
+        start_col: Left column of the range (1-indexed).
+        end_row: Bottom row of the range (inclusive).
+        end_col: Right column of the range (inclusive).
+    """
+    return numbers_bridge.clear_range(
+        document, sheet, table, start_row, start_col, end_row, end_col
+    )
+
+
+@mcp.tool()
+def transpose_table(document: str, sheet: str, table: str) -> str:
+    """Transpose the entire table — swap all rows and columns in place.
+
+    The Numbers scripting API's transpose command operates on a whole table,
+    not a sub-range. Use get_range / set_range to transpose a partial selection
+    manually.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet.
+        table: Exact name of the table within the sheet.
+    """
+    return numbers_bridge.transpose_table(document, sheet, table)
+
+
+@mcp.tool()
+def export_document(
+    document: str,
+    path: str,
+    format: str = "numbers",
+) -> str:
+    """Export a Numbers document to a file in the specified format.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        path: Absolute POSIX path for the output file. The parent directory
+              must exist. Any existing file at this path will be overwritten.
+        format: One of "numbers" (.numbers), "pdf", "xlsx" (Excel), or "csv".
+    """
+    return numbers_bridge.export_document(document, path, format)
 
 
 # ---------------------------------------------------------------------------

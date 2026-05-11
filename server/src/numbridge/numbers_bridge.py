@@ -21,13 +21,13 @@ class NumbersError(RuntimeError):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _run(script: str) -> str:
+def _run(script: str, timeout: float = _TIMEOUT) -> str:
     """Execute *script* via ``osascript -e`` and return stripped stdout."""
     result = subprocess.run(
         ["osascript", "-e", script],
         capture_output=True,
         text=True,
-        timeout=_TIMEOUT,
+        timeout=timeout,
     )
     if result.returncode != 0:
         msg = result.stderr.strip()
@@ -100,6 +100,41 @@ _ALIGNMENT_MAP: dict[str, str] = {
 _BOLD_TOKENS   = ("bold", "heavy", "black", "demibold", "semibold")
 _ITALIC_TOKENS = ("italic", "oblique")
 
+_VERTICAL_ALIGNMENT_MAP: dict[str, str] = {
+    "top":    "top",
+    "center": "center",
+    "bottom": "bottom",
+}
+
+# Maps user-facing export format names to AppleScript format constants.
+_EXPORT_FORMAT_MAP: dict[str, str] = {
+    "numbers": "Numbers 09",
+    "pdf":     "PDF",
+    "xlsx":    "Microsoft Excel",
+    "csv":     "CSV",
+}
+
+
+def _color_to_as(rgb: list[int]) -> str:
+    """Convert [r, g, b] (0–255 each) to an AppleScript color literal {r, g, b} (0–65535 each)."""
+    return "{{{}, {}, {}}}".format(*(max(0, min(65535, round(int(v) * 257))) for v in rgb))
+
+
+def _parse_color(s: str) -> list[int] | None:
+    """Parse a comma-separated AppleScript color string ("r,g,b" in 0–65535) to [r,g,b] (0–255).
+
+    Returns None for empty / missing-value inputs.
+    """
+    if not s or s.strip() in ("none", "missing value", ""):
+        return None
+    try:
+        parts = s.split(",")
+        if len(parts) != 3:
+            return None
+        return [round(int(p.strip()) / 257) for p in parts]
+    except (ValueError, TypeError):
+        return None
+
 
 def _apply_bold_italic(font_name: str, bold: bool | None, italic: bool | None) -> str:
     """Return a PostScript font name with the requested bold/italic state applied.
@@ -140,6 +175,10 @@ def _fmt_stmts(
     alignment: str | None,
     new_font: str | None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> list[str]:
     """Return AppleScript statements for the requested format changes on *addr*."""
     stmts: list[str] = []
@@ -151,6 +190,14 @@ def _fmt_stmts(
         stmts.append(f'set font name of cell "{addr}" to "{_q(new_font)}"')
     if font_size is not None:
         stmts.append(f'set font size of cell "{addr}" to {font_size}')
+    if text_color is not None:
+        stmts.append(f'set text color of cell "{addr}" to {_color_to_as(text_color)}')
+    if background_color is not None:
+        stmts.append(f'set background color of cell "{addr}" to {_color_to_as(background_color)}')
+    if text_wrap is not None:
+        stmts.append(f'set text wrap of cell "{addr}" to {"true" if text_wrap else "false"}')
+    if vertical_alignment is not None:
+        stmts.append(f'set vertical alignment of cell "{addr}" to {_VERTICAL_ALIGNMENT_MAP[vertical_alignment]}')
     return stmts
 
 
@@ -494,6 +541,10 @@ def set_cell(
     italic: bool | None = None,
     alignment: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> None:
     """Write a single cell value with optional formatting.
 
@@ -501,11 +552,15 @@ def set_cell(
     or None / "" to clear the cell.  Row and column are 1-indexed.
 
     Formatting parameters (all optional — omit to leave existing format unchanged):
-      number_format   "currency" | "number" | "percentage" | "text"
-      bold            True / False
-      italic          True / False
-      alignment       "left" | "center" | "right"
-      font_size       point size (e.g. 12.0)
+      number_format      "currency" | "number" | "percentage" | "text"
+      bold               True / False
+      italic             True / False
+      alignment          "left" | "center" | "right"
+      font_size          point size (e.g. 12.0)
+      text_color         [r, g, b] with each component 0–255
+      background_color   [r, g, b] with each component 0–255
+      text_wrap          True / False
+      vertical_alignment "top" | "center" | "bottom"
 
     Note: decimal_places and currency_symbol are accepted for API compatibility
     but have no effect — Numbers' scripting API does not expose these properties.
@@ -517,6 +572,10 @@ def set_cell(
     if alignment is not None and alignment not in _ALIGNMENT_MAP:
         raise ValueError(
             f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+    if vertical_alignment is not None and vertical_alignment not in _VERTICAL_ALIGNMENT_MAP:
+        raise ValueError(
+            f"vertical_alignment must be one of {list(_VERTICAL_ALIGNMENT_MAP)}; got {vertical_alignment!r}"
         )
 
     doc  = _q(document)
@@ -543,7 +602,8 @@ def set_cell(
 
     stmts = (
         [f'set value of cell "{addr}" to {_as_value(value)}']
-        + _fmt_stmts(addr, number_format, alignment, new_font, font_size)
+        + _fmt_stmts(addr, number_format, alignment, new_font, font_size,
+                     text_color, background_color, text_wrap, vertical_alignment)
     )
     body = "\n                ".join(stmts)
     _run(
@@ -574,6 +634,10 @@ def set_range(
     italic: bool | None = None,
     alignment: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> None:
     """Write a rectangular block of cells with optional formatting.
 
@@ -584,11 +648,15 @@ def set_range(
     Limited to 1 000 cells total.
 
     Formatting parameters apply uniformly to every written cell (all optional):
-      number_format   "currency" | "number" | "percentage" | "text"
-      bold            True / False
-      italic          True / False
-      alignment       "left" | "center" | "right"
-      font_size       point size (e.g. 12.0)
+      number_format      "currency" | "number" | "percentage" | "text"
+      bold               True / False
+      italic             True / False
+      alignment          "left" | "center" | "right"
+      font_size          point size (e.g. 12.0)
+      text_color         [r, g, b] with each component 0–255
+      background_color   [r, g, b] with each component 0–255
+      text_wrap          True / False
+      vertical_alignment "top" | "center" | "bottom"
 
     Note: decimal_places and currency_symbol are accepted for API compatibility
     but have no effect — Numbers' scripting API does not expose these properties.
@@ -600,6 +668,10 @@ def set_range(
     if alignment is not None and alignment not in _ALIGNMENT_MAP:
         raise ValueError(
             f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+    if vertical_alignment is not None and vertical_alignment not in _VERTICAL_ALIGNMENT_MAP:
+        raise ValueError(
+            f"vertical_alignment must be one of {list(_VERTICAL_ALIGNMENT_MAP)}; got {vertical_alignment!r}"
         )
 
     n_cells = sum(len(row) for row in values)
@@ -667,7 +739,8 @@ end tell"""
                 ) else ""
                 if current_font:
                     new_font = _apply_bold_italic(current_font, bold, italic)
-            stmts.extend(_fmt_stmts(addr, number_format, alignment, new_font, font_size))
+            stmts.extend(_fmt_stmts(addr, number_format, alignment, new_font, font_size,
+                                     text_color, background_color, text_wrap, vertical_alignment))
 
     body = "\n                ".join(stmts)
     script = (
@@ -834,12 +907,18 @@ def get_cell_format(
     """Return formatting properties of a single cell.
 
     Returns a dict with keys:
-      font_name     PostScript font name (e.g. "HelveticaNeue-Bold")
-      font_size     point size as a float
-      bold          True / False (derived from font name)
-      italic        True / False (derived from font name)
-      alignment     string as reported by Numbers (e.g. "left", "center", "right")
-      number_format string as reported by Numbers (e.g. "automatic", "number", "currency")
+      font_name          PostScript font name (e.g. "HelveticaNeue-Bold")
+      font_size          point size as a float
+      bold               True / False (derived from font name)
+      italic             True / False (derived from font name)
+      alignment          string as reported by Numbers (e.g. "left", "center", "right",
+                         "auto align")
+      number_format      string as reported by Numbers (e.g. "automatic", "number",
+                         "currency")
+      text_color         [r, g, b] (0–255) or None if using the default text colour
+      background_color   [r, g, b] (0–255) or None if the cell has no fill
+      text_wrap          True / False
+      vertical_alignment string as reported by Numbers (e.g. "top", "center", "bottom")
     """
     doc  = _q(document)
     sht  = _q(sheet)
@@ -854,25 +933,47 @@ def get_cell_format(
         f'                set fs to font size of cell "{addr}"\n'
         f'                set al to alignment of cell "{addr}" as text\n'
         f'                set fmt to format of cell "{addr}" as text\n'
-        f'                return fn & "||" & (fs as text) & "||" & al & "||" & fmt\n'
+        f'                set tc to text color of cell "{addr}"\n'
+        f'                set bc to background color of cell "{addr}"\n'
+        f'                set tw to text wrap of cell "{addr}"\n'
+        f'                set va to vertical alignment of cell "{addr}" as text\n'
+        f'                if tc is missing value then\n'
+        f'                    set tc_str to ""\n'
+        f'                else\n'
+        f'                    set tc_str to (item 1 of tc as text) & "," & (item 2 of tc as text) & "," & (item 3 of tc as text)\n'
+        f'                end if\n'
+        f'                if bc is missing value then\n'
+        f'                    set bc_str to ""\n'
+        f'                else\n'
+        f'                    set bc_str to (item 1 of bc as text) & "," & (item 2 of bc as text) & "," & (item 3 of bc as text)\n'
+        f'                end if\n'
+        f'                return fn & "||" & (fs as text) & "||" & al & "||" & fmt & "||" & tc_str & "||" & bc_str & "||" & (tw as text) & "||" & va\n'
         f'            end tell\n'
         f'        end tell\n'
         f'    end tell\n'
         f'end tell'
     )
     parts = raw.split("||")
-    font_name     = parts[0] if len(parts) > 0 else ""
-    font_size     = float(parts[1]) if len(parts) > 1 else 0.0
-    alignment     = parts[2] if len(parts) > 2 else ""
-    number_format = parts[3] if len(parts) > 3 else ""
+    font_name          = parts[0] if len(parts) > 0 else ""
+    font_size          = float(parts[1]) if len(parts) > 1 else 0.0
+    alignment          = parts[2] if len(parts) > 2 else ""
+    number_format      = parts[3] if len(parts) > 3 else ""
+    text_color         = _parse_color(parts[4]) if len(parts) > 4 else None
+    background_color   = _parse_color(parts[5]) if len(parts) > 5 else None
+    text_wrap_str      = parts[6] if len(parts) > 6 else ""
+    vertical_alignment = parts[7] if len(parts) > 7 else ""
     style_lc = (font_name.rsplit("-", 1)[1] if "-" in font_name else "").lower()
     return {
-        "font_name":     font_name,
-        "font_size":     font_size,
-        "bold":          any(t in style_lc for t in _BOLD_TOKENS),
-        "italic":        any(t in style_lc for t in _ITALIC_TOKENS),
-        "alignment":     alignment,
-        "number_format": number_format,
+        "font_name":          font_name,
+        "font_size":          font_size,
+        "bold":               any(t in style_lc for t in _BOLD_TOKENS),
+        "italic":             any(t in style_lc for t in _ITALIC_TOKENS),
+        "alignment":          alignment,
+        "number_format":      number_format,
+        "text_color":         text_color,
+        "background_color":   background_color,
+        "text_wrap":          text_wrap_str == "true",
+        "vertical_alignment": vertical_alignment,
     }
 
 
@@ -956,6 +1057,10 @@ def set_row_format(
     alignment: str | None = None,
     number_format: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> str:
     """Apply formatting to every cell in *row*.
 
@@ -972,10 +1077,16 @@ def set_row_format(
         alignment: "left" | "center" | "right".
         number_format: "currency" | "number" | "percentage" | "text".
         font_size: Point size (e.g. 14.0).
+        text_color: [r, g, b] with each component 0–255.
+        background_color: [r, g, b] with each component 0–255.
+        text_wrap: True / False.
+        vertical_alignment: "top" | "center" | "bottom".
     """
     if row < 1:
         raise ValueError(f"row must be >= 1; got {row}")
-    if bold is None and italic is None and alignment is None and number_format is None and font_size is None:
+    if (bold is None and italic is None and alignment is None and number_format is None
+            and font_size is None and text_color is None and background_color is None
+            and text_wrap is None and vertical_alignment is None):
         return f"Row {row} — nothing to format"
     if number_format is not None and number_format not in _NUMBER_FORMAT_MAP:
         raise ValueError(
@@ -984,6 +1095,10 @@ def set_row_format(
     if alignment is not None and alignment not in _ALIGNMENT_MAP:
         raise ValueError(
             f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+    if vertical_alignment is not None and vertical_alignment not in _VERTICAL_ALIGNMENT_MAP:
+        raise ValueError(
+            f"vertical_alignment must be one of {list(_VERTICAL_ALIGNMENT_MAP)}; got {vertical_alignment!r}"
         )
 
     doc = _q(document)
@@ -1012,6 +1127,14 @@ def set_row_format(
             stmts.append(f'set alignment of {ref} to {_ALIGNMENT_MAP[alignment]}')
         if font_size is not None:
             stmts.append(f'set font size of {ref} to {font_size}')
+        if text_color is not None:
+            stmts.append(f'set text color of {ref} to {_color_to_as(text_color)}')
+        if background_color is not None:
+            stmts.append(f'set background color of {ref} to {_color_to_as(background_color)}')
+        if text_wrap is not None:
+            stmts.append(f'set text wrap of {ref} to {"true" if text_wrap else "false"}')
+        if vertical_alignment is not None:
+            stmts.append(f'set vertical alignment of {ref} to {_VERTICAL_ALIGNMENT_MAP[vertical_alignment]}')
 
     body = "\n                ".join(stmts)
     result = subprocess.run(
@@ -1043,6 +1166,10 @@ def set_column_format(
     alignment: str | None = None,
     number_format: str | None = None,
     font_size: float | None = None,
+    text_color: list[int] | None = None,
+    background_color: list[int] | None = None,
+    text_wrap: bool | None = None,
+    vertical_alignment: str | None = None,
 ) -> str:
     """Apply formatting to every cell in *column*.
 
@@ -1059,10 +1186,16 @@ def set_column_format(
         alignment: "left" | "center" | "right".
         number_format: "currency" | "number" | "percentage" | "text".
         font_size: Point size (e.g. 14.0).
+        text_color: [r, g, b] with each component 0–255.
+        background_color: [r, g, b] with each component 0–255.
+        text_wrap: True / False.
+        vertical_alignment: "top" | "center" | "bottom".
     """
     if column < 1:
         raise ValueError(f"column must be >= 1; got {column}")
-    if bold is None and italic is None and alignment is None and number_format is None and font_size is None:
+    if (bold is None and italic is None and alignment is None and number_format is None
+            and font_size is None and text_color is None and background_color is None
+            and text_wrap is None and vertical_alignment is None):
         return f"Column {column} — nothing to format"
     if number_format is not None and number_format not in _NUMBER_FORMAT_MAP:
         raise ValueError(
@@ -1071,6 +1204,10 @@ def set_column_format(
     if alignment is not None and alignment not in _ALIGNMENT_MAP:
         raise ValueError(
             f"alignment must be one of {list(_ALIGNMENT_MAP)}; got {alignment!r}"
+        )
+    if vertical_alignment is not None and vertical_alignment not in _VERTICAL_ALIGNMENT_MAP:
+        raise ValueError(
+            f"vertical_alignment must be one of {list(_VERTICAL_ALIGNMENT_MAP)}; got {vertical_alignment!r}"
         )
 
     doc = _q(document)
@@ -1099,6 +1236,14 @@ def set_column_format(
             stmts.append(f'set alignment of {ref} to {_ALIGNMENT_MAP[alignment]}')
         if font_size is not None:
             stmts.append(f'set font size of {ref} to {font_size}')
+        if text_color is not None:
+            stmts.append(f'set text color of {ref} to {_color_to_as(text_color)}')
+        if background_color is not None:
+            stmts.append(f'set background color of {ref} to {_color_to_as(background_color)}')
+        if text_wrap is not None:
+            stmts.append(f'set text wrap of {ref} to {"true" if text_wrap else "false"}')
+        if vertical_alignment is not None:
+            stmts.append(f'set vertical alignment of {ref} to {_VERTICAL_ALIGNMENT_MAP[vertical_alignment]}')
 
     body = "\n                ".join(stmts)
     result = subprocess.run(
@@ -1117,6 +1262,513 @@ def set_column_format(
     if result.returncode != 0:
         raise NumbersError(result.stderr.strip() or f"osascript exited with code {result.returncode}")
     return f"Column {column} formatted in table {table!r}"
+
+
+def get_cell_formula(
+    document: str, sheet: str, table: str, row: int, column: int
+) -> str | None:
+    """Return the formula string for a cell, or None if the cell has no formula.
+
+    Read-only — the Numbers scripting dictionary exposes ``formula`` as a
+    read-only property; formulas cannot be written via AppleScript.
+    """
+    doc  = _q(document)
+    sht  = _q(sheet)
+    tbl  = _q(table)
+    addr = f"{_col_letter(column)}{row}"
+    raw = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set f to formula of cell "{addr}"\n'
+        f'                if f is missing value then return ""\n'
+        f'                return f\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return raw if raw else None
+
+
+def rename_table(document: str, sheet: str, old_name: str, new_name: str) -> str:
+    """Rename a table in *sheet* from *old_name* to *new_name*.
+
+    Raises ValueError if *old_name* does not exist or *new_name* is already taken.
+    """
+    if old_name == new_name:
+        return f"Table {old_name!r} already has that name"
+    doc = _q(document)
+    sht = _q(sheet)
+    old = _q(old_name)
+    new = _q(new_name)
+    result = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            repeat with t in tables\n'
+        f'                if name of t is "{new}" then return "NEW_EXISTS"\n'
+        f'            end repeat\n'
+        f'            repeat with t in tables\n'
+        f'                if name of t is "{old}" then\n'
+        f'                    set name of t to "{new}"\n'
+        f'                    return "OK"\n'
+        f'                end if\n'
+        f'            end repeat\n'
+        f'            return "NOT_FOUND"\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    if result == "NEW_EXISTS":
+        raise ValueError(f"Table {new_name!r} already exists in sheet {sheet!r}")
+    if result == "NOT_FOUND":
+        raise ValueError(f"Table {old_name!r} not found in sheet {sheet!r}")
+    return f"Table {old_name!r} renamed to {new_name!r} in sheet {sheet!r}"
+
+
+def get_table_info(document: str, sheet: str, table: str) -> dict:
+    """Return structural metadata about a table.
+
+    Returns a dict with keys:
+      name                 current table name
+      row_count            total rows (including headers and footers)
+      column_count         total columns
+      header_row_count     number of header rows (0–5)
+      header_column_count  number of header columns (0–1)
+      footer_row_count     number of footer rows (0–5)
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    raw = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set rc to row count\n'
+        f'                set cc to column count\n'
+        f'                set hrc to header row count\n'
+        f'                set hcc to header column count\n'
+        f'                set frc to footer row count\n'
+        f'                set nm to name\n'
+        f'                return nm & "||" & (rc as text) & "||" & (cc as text) & "||" & (hrc as text) & "||" & (hcc as text) & "||" & (frc as text)\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    parts = raw.split("||")
+    return {
+        "name":                parts[0] if len(parts) > 0 else table,
+        "row_count":           int(parts[1]) if len(parts) > 1 else 0,
+        "column_count":        int(parts[2]) if len(parts) > 2 else 0,
+        "header_row_count":    int(parts[3]) if len(parts) > 3 else 0,
+        "header_column_count": int(parts[4]) if len(parts) > 4 else 0,
+        "footer_row_count":    int(parts[5]) if len(parts) > 5 else 0,
+    }
+
+
+def set_table_headers(
+    document: str,
+    sheet: str,
+    table: str,
+    *,
+    header_rows: int | None = None,
+    header_columns: int | None = None,
+    footer_rows: int | None = None,
+) -> str:
+    """Set the number of header/footer rows and columns on a table.
+
+    All parameters are optional — omit to leave that count unchanged.
+    Numbers allows 0–5 header rows, 0–1 header columns, and 0–5 footer rows.
+    """
+    if header_rows is None and header_columns is None and footer_rows is None:
+        return f"Table {table!r} — nothing to change"
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    stmts: list[str] = []
+    if header_rows is not None:
+        stmts.append(f"set header row count to {header_rows}")
+    if header_columns is not None:
+        stmts.append(f"set header column count to {header_columns}")
+    if footer_rows is not None:
+        stmts.append(f"set footer row count to {footer_rows}")
+    body = "\n                ".join(stmts)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                {body}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    parts = [
+        f"{header_rows} header row(s)" if header_rows is not None else None,
+        f"{header_columns} header column(s)" if header_columns is not None else None,
+        f"{footer_rows} footer row(s)" if footer_rows is not None else None,
+    ]
+    return f"Table {table!r} updated: {', '.join(p for p in parts if p)}"
+
+
+def get_table_layout(document: str, sheet: str, table: str) -> dict:
+    """Return the position and size of a table on its canvas.
+
+    Returns a dict with keys:
+      x       horizontal offset in points from the left edge of the canvas
+      y       vertical offset in points from the top edge of the canvas
+      width   table width in points
+      height  table height in points
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    raw = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set pos to position\n'
+        f'                set w to width\n'
+        f'                set h to height\n'
+        f'                return (item 1 of pos as text) & "||" & (item 2 of pos as text) & "||" & (w as text) & "||" & (h as text)\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    parts = raw.split("||")
+    return {
+        "x":      float(parts[0]) if len(parts) > 0 else 0.0,
+        "y":      float(parts[1]) if len(parts) > 1 else 0.0,
+        "width":  float(parts[2]) if len(parts) > 2 else 0.0,
+        "height": float(parts[3]) if len(parts) > 3 else 0.0,
+    }
+
+
+def set_table_layout(
+    document: str,
+    sheet: str,
+    table: str,
+    *,
+    x: float | None = None,
+    y: float | None = None,
+    width: float | None = None,
+    height: float | None = None,
+) -> str:
+    """Set the position and/or size of a table on its canvas.
+
+    All parameters are optional — omit to leave that property unchanged.
+    When only one of *x* or *y* is supplied the other is read from Numbers
+    first so the position update is complete.
+    """
+    if x is None and y is None and width is None and height is None:
+        return f"Table {table!r} — nothing to change"
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    stmts: list[str] = []
+    if x is not None or y is not None:
+        if x is None or y is None:
+            current = get_table_layout(document, sheet, table)
+            x = x if x is not None else current["x"]
+            y = y if y is not None else current["y"]
+        stmts.append(f"set position to {{{x}, {y}}}")
+    if width is not None:
+        stmts.append(f"set width to {width}")
+    if height is not None:
+        stmts.append(f"set height to {height}")
+    body = "\n                ".join(stmts)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                {body}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Table {table!r} layout updated"
+
+
+def set_table_locked(document: str, sheet: str, table: str, locked: bool) -> str:
+    """Lock or unlock a table on its canvas.
+
+    Locked tables cannot be moved or resized in the Numbers UI.
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                set locked to {"true" if locked else "false"}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Table {table!r} {'locked' if locked else 'unlocked'}"
+
+
+def insert_row(document: str, sheet: str, table: str, before_row: int) -> str:
+    """Insert a blank row before *before_row* in *table* (1-indexed).
+
+    All existing rows at or below *before_row* shift down by one.
+    Raises ValueError for non-positive row numbers.
+    """
+    if before_row < 1:
+        raise ValueError(f"before_row must be >= 1; got {before_row}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                add row above row {before_row}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Row inserted before row {before_row} in table {table!r}"
+
+
+def insert_column(document: str, sheet: str, table: str, before_column: int) -> str:
+    """Insert a blank column before *before_column* in *table* (1-indexed).
+
+    All existing columns at or to the right of *before_column* shift right.
+    Raises ValueError for non-positive column numbers.
+    """
+    if before_column < 1:
+        raise ValueError(f"before_column must be >= 1; got {before_column}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                add column before column {before_column}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Column inserted before column {before_column} in table {table!r}"
+
+
+def remove_row(document: str, sheet: str, table: str, row: int) -> str:
+    """Remove *row* from *table* (1-indexed).
+
+    All rows below *row* shift up by one.
+    Raises ValueError for non-positive row numbers.
+    """
+    if row < 1:
+        raise ValueError(f"row must be >= 1; got {row}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                remove row {row}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Row {row} removed from table {table!r}"
+
+
+def remove_column(document: str, sheet: str, table: str, column: int) -> str:
+    """Remove *column* from *table* (1-indexed).
+
+    All columns to the right of *column* shift left by one.
+    Raises ValueError for non-positive column numbers.
+    """
+    if column < 1:
+        raise ValueError(f"column must be >= 1; got {column}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                remove column {column}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Column {column} removed from table {table!r}"
+
+
+def merge_cells(
+    document: str,
+    sheet: str,
+    table: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> str:
+    """Merge a rectangular block of cells into a single merged cell.
+
+    Content in cells other than the top-left cell is discarded on merge.
+    Indices are 1-based.
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    rng = f"{_col_letter(start_col)}{start_row}:{_col_letter(end_col)}{end_row}"
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                merge range "{rng}"\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Cells {rng} merged in table {table!r}"
+
+
+def unmerge_cells(
+    document: str,
+    sheet: str,
+    table: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> str:
+    """Unmerge a previously-merged cell region, restoring individual cells.
+
+    Indices are 1-based.
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    rng = f"{_col_letter(start_col)}{start_row}:{_col_letter(end_col)}{end_row}"
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                unmerge range "{rng}"\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Cells {rng} unmerged in table {table!r}"
+
+
+def clear_range(
+    document: str,
+    sheet: str,
+    table: str,
+    start_row: int,
+    start_col: int,
+    end_row: int,
+    end_col: int,
+) -> str:
+    """Clear the content and formatting of cells in a range.
+
+    Equivalent to selecting the cells and pressing Delete in the Numbers UI.
+    Both cell values and cell formatting (number format, colours, etc.) are
+    removed.  Indices are 1-based.
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    rng = f"{_col_letter(start_col)}{start_row}:{_col_letter(end_col)}{end_row}"
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            tell table "{tbl}"\n'
+        f'                clear range "{rng}"\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Range {rng} cleared in table {table!r}"
+
+
+def transpose_table(document: str, sheet: str, table: str) -> str:
+    """Transpose the entire table — swap all rows and columns in place.
+
+    The Numbers scripting dictionary's ``transpose`` command operates on a
+    whole table (not a sub-range).  Issued from within ``tell sheet``, same
+    as ``sort table``.
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            transpose table "{tbl}"\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    return f"Table {table!r} transposed"
+
+
+def export_document(document: str, path: str, format: str = "numbers") -> str:
+    """Export *document* to a file at *path*.
+
+    format:
+      "numbers"  — Numbers spreadsheet (.numbers)
+      "pdf"      — PDF document
+      "xlsx"     — Microsoft Excel workbook (.xlsx)
+      "csv"      — Comma-separated values (.csv)
+
+    *path* must be an absolute POSIX path; its parent directory must exist.
+    Any existing file at *path* is overwritten.
+    """
+    if format not in _EXPORT_FORMAT_MAP:
+        raise ValueError(
+            f"format must be one of {list(_EXPORT_FORMAT_MAP)}; got {format!r}"
+        )
+    parent = os.path.dirname(path)
+    if parent and not os.path.exists(parent):
+        raise ValueError(f"Export directory does not exist: {parent!r}")
+    doc      = _q(document)
+    p        = _q(path)
+    fmt_name = _EXPORT_FORMAT_MAP[format]
+    _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        export to POSIX file "{p}" as {fmt_name}\n'
+        f'    end tell\n'
+        f'end tell',
+        timeout=_SHEET_TIMEOUT,
+    )
+    return f"Document {document!r} exported to {path!r} as {format}"
 
 
 def sort_table(

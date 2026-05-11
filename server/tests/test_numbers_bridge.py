@@ -14,27 +14,45 @@ from numbridge.numbers_bridge import (
     _as_list,
     _as_value,
     _col_letter,
+    _color_to_as,
+    _parse_color,
     _parse_grid,
     _q,
     _run,
     add_sheet,
+    clear_range,
     close_document,
     create_document,
     delete_sheet,
+    export_document,
     get_cell_format,
+    get_cell_formula,
     get_column_width,
     get_range,
     get_row_height,
     get_sheet_as_table,
+    get_table_info,
+    get_table_layout,
+    insert_column,
+    insert_row,
+    merge_cells,
     open_document,
+    remove_column,
+    remove_row,
     rename_sheet,
+    rename_table,
     resize_table,
     set_column_format,
     set_column_width,
     set_range,
     set_row_format,
     set_row_height,
+    set_table_headers,
+    set_table_layout,
+    set_table_locked,
     sort_table,
+    transpose_table,
+    unmerge_cells,
 )
 
 
@@ -450,8 +468,9 @@ class TestSetRowHeight:
 # ---------------------------------------------------------------------------
 
 class TestGetCellFormat:
+    # Full 8-field payload: font||size||alignment||fmt||text_color||bg_color||wrap||valign
     def test_returns_dict_with_expected_keys(self):
-        payload = "HelveticaNeue-Bold||14.0||left||automatic"
+        payload = "HelveticaNeue-Bold||14.0||left||automatic||||||false||top"
         with patch("numbridge.numbers_bridge.subprocess.run",
                    return_value=_make_completed(stdout=payload)):
             result = get_cell_format("doc", "Sheet 1", "Table 1", 1, 1)
@@ -461,9 +480,13 @@ class TestGetCellFormat:
         assert result["italic"] is False
         assert result["alignment"] == "left"
         assert result["number_format"] == "automatic"
+        assert result["text_color"] is None
+        assert result["background_color"] is None
+        assert result["text_wrap"] is False
+        assert result["vertical_alignment"] == "top"
 
     def test_bold_italic_both_detected(self):
-        payload = "HelveticaNeue-BoldItalic||12.0||center||number"
+        payload = "HelveticaNeue-BoldItalic||12.0||center||number||||||false||center"
         with patch("numbridge.numbers_bridge.subprocess.run",
                    return_value=_make_completed(stdout=payload)):
             result = get_cell_format("doc", "Sheet 1", "Table 1", 2, 3)
@@ -471,12 +494,34 @@ class TestGetCellFormat:
         assert result["italic"] is True
 
     def test_plain_font_is_not_bold_or_italic(self):
-        payload = "HelveticaNeue||12.0||right||text"
+        payload = "HelveticaNeue||12.0||right||text||||||false||bottom"
         with patch("numbridge.numbers_bridge.subprocess.run",
                    return_value=_make_completed(stdout=payload)):
             result = get_cell_format("doc", "Sheet 1", "Table 1", 1, 2)
         assert result["bold"] is False
         assert result["italic"] is False
+
+    def test_text_color_parsed(self):
+        # AppleScript returns 0-65535 per channel; Python gets 0-255
+        payload = "Helvetica||12.0||left||automatic||0,0,0||||||false||top"
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout=payload)):
+            result = get_cell_format("doc", "Sheet 1", "Table 1", 1, 1)
+        assert result["text_color"] == [0, 0, 0]
+
+    def test_background_color_parsed(self):
+        payload = "Helvetica||12.0||left||automatic||||65535,0,0||false||top"
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout=payload)):
+            result = get_cell_format("doc", "Sheet 1", "Table 1", 1, 1)
+        assert result["background_color"] == [255, 0, 0]
+
+    def test_text_wrap_true(self):
+        payload = "Helvetica||12.0||left||automatic||||||true||top"
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout=payload)):
+            result = get_cell_format("doc", "Sheet 1", "Table 1", 1, 1)
+        assert result["text_wrap"] is True
 
     def test_propagates_numbers_error(self):
         with patch("numbridge.numbers_bridge.subprocess.run",
@@ -759,3 +804,463 @@ class TestRenameSheet:
                    return_value=_make_completed(stderr="doc not found", returncode=1)):
             with pytest.raises(NumbersError):
                 rename_sheet("doc", "Old", "New")
+
+
+# ---------------------------------------------------------------------------
+# _color_to_as / _parse_color — pure helpers
+# ---------------------------------------------------------------------------
+
+class TestColorToAs:
+    def test_black(self):
+        assert _color_to_as([0, 0, 0]) == "{0, 0, 0}"
+
+    def test_white(self):
+        assert _color_to_as([255, 255, 255]) == "{65535, 65535, 65535}"
+
+    def test_red(self):
+        result = _color_to_as([255, 0, 0])
+        assert result == "{65535, 0, 0}"
+
+    def test_clamps_above_255(self):
+        result = _color_to_as([300, 0, 0])
+        assert result == "{65535, 0, 0}"
+
+    def test_clamps_below_zero(self):
+        result = _color_to_as([-10, 0, 0])
+        assert result == "{0, 0, 0}"
+
+
+class TestParseColor:
+    def test_empty_string_returns_none(self):
+        assert _parse_color("") is None
+
+    def test_none_string_returns_none(self):
+        assert _parse_color("none") is None
+
+    def test_missing_value_returns_none(self):
+        assert _parse_color("missing value") is None
+
+    def test_black_as65535_range(self):
+        assert _parse_color("0,0,0") == [0, 0, 0]
+
+    def test_white_as65535_range(self):
+        result = _parse_color("65535,65535,65535")
+        assert result == [255, 255, 255]
+
+    def test_red_channel(self):
+        result = _parse_color("65535,0,0")
+        assert result == [255, 0, 0]
+
+    def test_wrong_field_count_returns_none(self):
+        assert _parse_color("255,0") is None
+
+    def test_non_numeric_returns_none(self):
+        assert _parse_color("a,b,c") is None
+
+
+# ---------------------------------------------------------------------------
+# get_cell_formula
+# ---------------------------------------------------------------------------
+
+class TestGetCellFormula:
+    def test_returns_formula_string(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="=SUM(A1:A5)")):
+            result = get_cell_formula("doc", "Sheet 1", "Table 1", 6, 1)
+        assert result == "=SUM(A1:A5)"
+
+    def test_returns_none_for_no_formula(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="")):
+            result = get_cell_formula("doc", "Sheet 1", "Table 1", 1, 1)
+        assert result is None
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                get_cell_formula("doc", "Sheet 1", "Table 1", 1, 1)
+
+
+# ---------------------------------------------------------------------------
+# rename_table
+# ---------------------------------------------------------------------------
+
+class TestRenameTable:
+    def test_returns_success_message(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="OK")):
+            result = rename_table("doc", "Sheet 1", "Old", "New")
+        assert "Old" in result and "New" in result
+
+    def test_noop_when_names_identical(self):
+        with patch("numbridge.numbers_bridge.subprocess.run") as mock:
+            result = rename_table("doc", "Sheet 1", "Same", "Same")
+            mock.assert_not_called()
+        assert "already has that name" in result
+
+    def test_raises_value_error_when_new_name_taken(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="NEW_EXISTS")):
+            with pytest.raises(ValueError, match="already exists"):
+                rename_table("doc", "Sheet 1", "Old", "Taken")
+
+    def test_raises_value_error_when_old_name_not_found(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="NOT_FOUND")):
+            with pytest.raises(ValueError, match="not found"):
+                rename_table("doc", "Sheet 1", "Ghost", "New")
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                rename_table("doc", "Sheet 1", "Old", "New")
+
+
+# ---------------------------------------------------------------------------
+# get_table_info
+# ---------------------------------------------------------------------------
+
+class TestGetTableInfo:
+    def test_returns_expected_dict(self):
+        payload = "Table 1||10||5||1||0||0"
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout=payload)):
+            result = get_table_info("doc", "Sheet 1", "Table 1")
+        assert result["name"] == "Table 1"
+        assert result["row_count"] == 10
+        assert result["column_count"] == 5
+        assert result["header_row_count"] == 1
+        assert result["header_column_count"] == 0
+        assert result["footer_row_count"] == 0
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                get_table_info("doc", "Sheet 1", "Table 1")
+
+
+# ---------------------------------------------------------------------------
+# set_table_headers
+# ---------------------------------------------------------------------------
+
+class TestSetTableHeaders:
+    def test_nothing_to_change_returns_early(self):
+        with patch("numbridge.numbers_bridge.subprocess.run") as mock:
+            result = set_table_headers("doc", "Sheet 1", "Table 1")
+            mock.assert_not_called()
+        assert "nothing" in result.lower()
+
+    def test_sets_header_rows(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            result = set_table_headers("doc", "Sheet 1", "Table 1", header_rows=1)
+            script = mock.call_args[0][0][2]
+        assert "header row count" in script
+        assert "1" in result
+
+    def test_sets_footer_rows(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            set_table_headers("doc", "Sheet 1", "Table 1", footer_rows=2)
+            script = mock.call_args[0][0][2]
+        assert "footer row count" in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                set_table_headers("doc", "Sheet 1", "Table 1", header_rows=1)
+
+
+# ---------------------------------------------------------------------------
+# get_table_layout / set_table_layout
+# ---------------------------------------------------------------------------
+
+class TestGetTableLayout:
+    def test_returns_expected_dict(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stdout="10.0||20.0||300.0||200.0")):
+            result = get_table_layout("doc", "Sheet 1", "Table 1")
+        assert result == {"x": 10.0, "y": 20.0, "width": 300.0, "height": 200.0}
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                get_table_layout("doc", "Sheet 1", "Table 1")
+
+
+class TestSetTableLayout:
+    def test_nothing_to_change_returns_early(self):
+        with patch("numbridge.numbers_bridge.subprocess.run") as mock:
+            result = set_table_layout("doc", "Sheet 1", "Table 1")
+            mock.assert_not_called()
+        assert "nothing" in result.lower()
+
+    def test_sets_width_and_height(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            set_table_layout("doc", "Sheet 1", "Table 1", width=400.0, height=300.0)
+            script = mock.call_args[0][0][2]
+        assert "set width to 400.0" in script
+        assert "set height to 300.0" in script
+
+    def test_position_requires_both_coords(self):
+        # Supplying only x triggers a read of current layout first
+        responses = [
+            _make_completed(stdout="5.0||10.0||300.0||200.0"),  # get_table_layout
+            _make_completed(),                                   # set_table_layout
+        ]
+        with patch("numbridge.numbers_bridge.subprocess.run", side_effect=responses) as mock:
+            set_table_layout("doc", "Sheet 1", "Table 1", x=50.0)
+        assert mock.call_count == 2
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                set_table_layout("doc", "Sheet 1", "Table 1", width=100.0)
+
+
+# ---------------------------------------------------------------------------
+# set_table_locked
+# ---------------------------------------------------------------------------
+
+class TestSetTableLocked:
+    def test_locks_table(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            result = set_table_locked("doc", "Sheet 1", "Table 1", True)
+            script = mock.call_args[0][0][2]
+        assert "set locked to true" in script
+        assert "locked" in result
+
+    def test_unlocks_table(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            result = set_table_locked("doc", "Sheet 1", "Table 1", False)
+            script = mock.call_args[0][0][2]
+        assert "set locked to false" in script
+        assert "unlocked" in result
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                set_table_locked("doc", "Sheet 1", "Table 1", True)
+
+
+# ---------------------------------------------------------------------------
+# insert_row / insert_column / remove_row / remove_column
+# ---------------------------------------------------------------------------
+
+class TestInsertRow:
+    def test_raises_for_zero_row(self):
+        with pytest.raises(ValueError, match="before_row"):
+            insert_row("doc", "Sheet 1", "Table 1", 0)
+
+    def test_script_uses_add_row_above(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            insert_row("doc", "Sheet 1", "Table 1", 3)
+            script = mock.call_args[0][0][2]
+        assert "add row above row 3" in script
+
+    def test_returns_confirmation(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()):
+            result = insert_row("doc", "Sheet 1", "Table 1", 2)
+        assert "2" in result
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                insert_row("doc", "Sheet 1", "Table 1", 1)
+
+
+class TestInsertColumn:
+    def test_raises_for_zero_column(self):
+        with pytest.raises(ValueError, match="before_column"):
+            insert_column("doc", "Sheet 1", "Table 1", 0)
+
+    def test_script_uses_add_column_before(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            insert_column("doc", "Sheet 1", "Table 1", 2)
+            script = mock.call_args[0][0][2]
+        assert "add column before column 2" in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                insert_column("doc", "Sheet 1", "Table 1", 1)
+
+
+class TestRemoveRow:
+    def test_raises_for_zero_row(self):
+        with pytest.raises(ValueError, match="row"):
+            remove_row("doc", "Sheet 1", "Table 1", 0)
+
+    def test_script_uses_remove_row(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            remove_row("doc", "Sheet 1", "Table 1", 4)
+            script = mock.call_args[0][0][2]
+        assert "remove row 4" in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                remove_row("doc", "Sheet 1", "Table 1", 1)
+
+
+class TestRemoveColumn:
+    def test_raises_for_zero_column(self):
+        with pytest.raises(ValueError, match="column"):
+            remove_column("doc", "Sheet 1", "Table 1", 0)
+
+    def test_script_uses_remove_column(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            remove_column("doc", "Sheet 1", "Table 1", 3)
+            script = mock.call_args[0][0][2]
+        assert "remove column 3" in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                remove_column("doc", "Sheet 1", "Table 1", 1)
+
+
+# ---------------------------------------------------------------------------
+# merge_cells / unmerge_cells / clear_range / transpose_range
+# ---------------------------------------------------------------------------
+
+class TestMergeCells:
+    def test_script_contains_merge_range(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            merge_cells("doc", "Sheet 1", "Table 1", 1, 1, 2, 3)
+            script = mock.call_args[0][0][2]
+        assert 'merge range "A1:C2"' in script
+
+    def test_returns_confirmation(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()):
+            result = merge_cells("doc", "Sheet 1", "Table 1", 1, 1, 1, 2)
+        assert "A1:B1" in result
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                merge_cells("doc", "Sheet 1", "Table 1", 1, 1, 2, 2)
+
+
+class TestUnmergeCells:
+    def test_script_contains_unmerge_range(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            unmerge_cells("doc", "Sheet 1", "Table 1", 1, 1, 2, 2)
+            script = mock.call_args[0][0][2]
+        assert 'unmerge range "A1:B2"' in script
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                unmerge_cells("doc", "Sheet 1", "Table 1", 1, 1, 2, 2)
+
+
+class TestClearRange:
+    def test_script_contains_clear_range(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            clear_range("doc", "Sheet 1", "Table 1", 1, 1, 3, 4)
+            script = mock.call_args[0][0][2]
+        assert 'clear range "A1:D3"' in script
+
+    def test_returns_confirmation(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()):
+            result = clear_range("doc", "Sheet 1", "Table 1", 2, 2, 4, 5)
+        assert "cleared" in result
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                clear_range("doc", "Sheet 1", "Table 1", 1, 1, 2, 2)
+
+
+class TestTransposeTable:
+    def test_script_contains_transpose_table(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()) as mock:
+            transpose_table("doc", "Sheet 1", "Table 1")
+            script = mock.call_args[0][0][2]
+        assert 'transpose table "Table 1"' in script
+
+    def test_returns_confirmation(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed()):
+            result = transpose_table("doc", "Sheet 1", "Table 1")
+        assert "transposed" in result
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.subprocess.run",
+                   return_value=_make_completed(stderr="err", returncode=1)):
+            with pytest.raises(NumbersError):
+                transpose_table("doc", "Sheet 1", "Table 1")
+
+
+# ---------------------------------------------------------------------------
+# export_document
+# ---------------------------------------------------------------------------
+
+class TestExportDocument:
+    def test_raises_for_invalid_format(self):
+        with pytest.raises(ValueError, match="format"):
+            export_document("doc", "/tmp/out.txt", "txt")
+
+    def test_raises_when_parent_dir_missing(self):
+        with pytest.raises(ValueError, match="directory"):
+            export_document("doc", "/nonexistent/dir/out.numbers", "numbers")
+
+    def test_script_uses_export_command(self):
+        with patch("numbridge.numbers_bridge.os.path.exists", return_value=True):
+            with patch("numbridge.numbers_bridge.subprocess.run",
+                       return_value=_make_completed()) as mock:
+                export_document("My Doc", "/tmp/out.xlsx", "xlsx")
+                script = mock.call_args[0][0][2]
+        assert "export to POSIX file" in script
+        assert "Microsoft Excel" in script
+
+    def test_numbers_format_uses_correct_constant(self):
+        with patch("numbridge.numbers_bridge.os.path.exists", return_value=True):
+            with patch("numbridge.numbers_bridge.subprocess.run",
+                       return_value=_make_completed()) as mock:
+                export_document("My Doc", "/tmp/out.numbers", "numbers")
+                script = mock.call_args[0][0][2]
+        assert "Numbers 09" in script
+
+    def test_returns_confirmation(self):
+        with patch("numbridge.numbers_bridge.os.path.exists", return_value=True):
+            with patch("numbridge.numbers_bridge.subprocess.run",
+                       return_value=_make_completed()):
+                result = export_document("My Doc", "/tmp/out.pdf", "pdf")
+        assert "My Doc" in result and "pdf" in result
+
+    def test_propagates_numbers_error(self):
+        with patch("numbridge.numbers_bridge.os.path.exists", return_value=True):
+            with patch("numbridge.numbers_bridge.subprocess.run",
+                       return_value=_make_completed(stderr="err", returncode=1)):
+                with pytest.raises(NumbersError):
+                    export_document("My Doc", "/tmp/out.xlsx", "xlsx")

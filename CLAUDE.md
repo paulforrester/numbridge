@@ -90,21 +90,37 @@ uv run pytest
 | `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
 | `get_cell` | `(document, sheet, table, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
 | `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
-| `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, font_size, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
-| `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, font_size, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
+| `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, font_size, text_color, background_color, text_wrap, vertical_alignment, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
+| `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, font_size, text_color, background_color, text_wrap, vertical_alignment, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
 | `resize_table` | `(document, sheet, table, num_rows, num_columns) → str` | Set row and column count; call before writing beyond the default 4-column boundary (-10006) |
 | `get_column_width` | `(document, sheet, table, column) → float` | Column width in points |
 | `set_column_width` | `(document, sheet, table, column, width) → str` | Set column width in points |
 | `get_row_height` | `(document, sheet, table, row) → float` | Row height in points |
 | `set_row_height` | `(document, sheet, table, row, height) → str` | Set row height in points |
-| `get_cell_format` | `(document, sheet, table, row, column) → dict` | Returns font_name, font_size, bold, italic, alignment, number_format |
-| `set_row_format` | `(document, sheet, table, row, *, bold, italic, alignment, number_format, font_size) → str` | Apply formatting to all cells in a row |
-| `set_column_format` | `(document, sheet, table, column, *, bold, italic, alignment, number_format, font_size) → str` | Apply formatting to all cells in a column |
+| `get_cell_format` | `(document, sheet, table, row, column) → dict` | Returns font_name, font_size, bold, italic, alignment, number_format, text_color ([r,g,b] or None), background_color ([r,g,b] or None), text_wrap, vertical_alignment |
+| `set_row_format` | `(document, sheet, table, row, *, bold, italic, alignment, number_format, font_size, text_color, background_color, text_wrap, vertical_alignment) → str` | Apply formatting to all cells in a row |
+| `set_column_format` | `(document, sheet, table, column, *, bold, italic, alignment, number_format, font_size, text_color, background_color, text_wrap, vertical_alignment) → str` | Apply formatting to all cells in a column |
+| `get_cell_formula` | `(document, sheet, table, row, column) → str \| None` | Formula string (e.g. `"=SUM(A1:A5)"`), or None if no formula. Read-only |
 | `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
 | `add_sheet` | `(document, sheet_name) → str` | Add a new blank sheet; errors if name already exists |
 | `delete_sheet` | `(document, sheet_name) → str` | Delete a sheet; errors if not found |
 | `rename_sheet` | `(document, old_name, new_name) → str` | Rename a sheet; no-op if names identical; errors if old missing or new taken |
+| `rename_table` | `(document, sheet, old_name, new_name) → str` | Rename a table within a sheet |
 | `get_sheet_as_table` | `(document, sheet, table) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
+| `get_table_info` | `(document, sheet, table) → dict` | Returns name, row_count, column_count, header_row_count, header_column_count, footer_row_count |
+| `set_table_headers` | `(document, sheet, table, *, header_rows, header_columns, footer_rows) → str` | Set number of header/footer rows and columns (all optional) |
+| `get_table_layout` | `(document, sheet, table) → dict` | Returns x, y (position in points), width, height on the canvas |
+| `set_table_layout` | `(document, sheet, table, *, x, y, width, height) → str` | Set position and/or size of the table on its canvas (all optional) |
+| `set_table_locked` | `(document, sheet, table, locked) → str` | Lock or unlock a table (locked tables can't be moved/resized) |
+| `insert_row` | `(document, sheet, table, before_row) → str` | Insert a blank row before the given row; all rows below shift down |
+| `insert_column` | `(document, sheet, table, before_column) → str` | Insert a blank column before the given column |
+| `remove_row` | `(document, sheet, table, row) → str` | Remove a row; all rows below shift up |
+| `remove_column` | `(document, sheet, table, column) → str` | Remove a column; all columns to the right shift left |
+| `merge_cells` | `(document, sheet, table, start_row, start_col, end_row, end_col) → str` | Merge a rectangular cell region; non-top-left content discarded |
+| `unmerge_cells` | `(document, sheet, table, start_row, start_col, end_row, end_col) → str` | Unmerge a merged region |
+| `clear_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → str` | Clear content AND formatting in a range (equivalent to Delete key) |
+| `transpose_table` | `(document, sheet, table) → str` | Transpose the entire table (swap all rows and columns) |
+| `export_document` | `(document, path, format="numbers") → str` | Export to `"numbers"` (.numbers), `"pdf"`, `"xlsx"`, or `"csv"` |
 
 All row/column indices are **1-based**. `set_range` generates one multi-statement AppleScript script so the entire write is a single `osascript` call.
 
@@ -115,22 +131,41 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `open_document` uses `open POSIX file "path"` — path is validated with `os.path.exists` before the AppleScript call to give a clean `ValueError` rather than a raw AppleScript error.
 - `close_document` uses `close document "name" saving yes/no`. Existence check is a separate loop from the close (same mutation-safety pattern as `delete_sheet`). `save=True` on an unsaved Untitled document will raise `NumbersError` — Numbers requires a file path to save to.
 - `create_document` uses `make new document with properties {name:"…"}` (or without properties when no name is given). Numbers assigns "Untitled N" automatically. The document is in-memory only until saved.
-- `_run(script)` — executes via `osascript -e`, raises `NumbersError` on non-zero exit.
+- `_run(script, timeout=_TIMEOUT)` — executes via `osascript -e`, raises `NumbersError` on non-zero exit. `timeout` is optional; `export_document` passes `_SHEET_TIMEOUT` (60 s).
 - `_as_value(v)` — converts a Python value to an AppleScript literal: `int`/`float` → bare number (numeric cell), `str` → quoted string (text cell), `None`/`""` → `""` (clears cell). `bool` is checked before `int` to avoid Python's bool-is-int subclass coercion.
+- `_color_to_as([r,g,b])` — converts 0–255 per channel to AppleScript `{r,g,b}` (0–65535 per channel, multiply by 257). `_parse_color(s)` reverses the conversion (divide by 257, round). Colors read back from Numbers may differ slightly from the values written due to Numbers' internal rounding.
 - `get_range` uses `formatted value` and a **collect-then-serialize** pattern: all rows are gathered into an AppleScript list-of-lists first, then serialized with tab+linefeed delimiters in a single pass *after* the loop. Setting `text item delimiters` inside the row loop corrupts the outer string accumulator (only the last row survives).
 - `get_range` uses `.rstrip("\r\n")` — not `.strip()` — on raw output. `.strip()` eats the trailing `\t` on the last row, silently dropping trailing empty cells.
-- Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes), `_SHEET_TIMEOUT = 60 s` (whole-sheet scan+read).
+- Separate timeouts: `_TIMEOUT = 10 s` (single-cell/list calls), `_RANGE_TIMEOUT = 30 s` (grid reads/writes), `_SHEET_TIMEOUT = 60 s` (whole-sheet scan+read, export).
 - `set_cell` / `set_range` optional formatting: `number_format` ("currency" | "number" | "percentage" | "text") maps to AppleScript constants `currency` / `number` / `percent` / `text` — note `percentage` → `percent`. The `date` format is excluded because `date and time` collides with AppleScript's built-in date type and cannot be set in plain-text osascript. `bold` / `italic` are not direct cell properties — implemented by reading the current PostScript font name (`font name of cell`), parsing the hyphen-delimited style suffix (e.g. `HelveticaNeue-BoldItalic`), and rewriting it. `currency_symbol` and `decimal_places` are accepted but silently ignored — not in the Numbers scripting dictionary. For `set_range` with bold/italic, the entire font grid is read first in one AppleScript call before the batch write.
+- `get_cell_format` reads 8 properties (`font name`, `font size`, `alignment`, `format`, `text color`, `background color`, `text wrap`, `vertical alignment`) in a single osascript call, serialized with `"||"` delimiter. Colors are serialized as `"r,g,b"` (0–65535) or `""` for missing value. Bold/italic are derived by parsing the PostScript font-name suffix.
+- `set_cell` / `set_range` / `set_row_format` / `set_column_format` accept `text_color`, `background_color` (as `[r,g,b]` lists, 0–255), `text_wrap` (bool), and `vertical_alignment` ("top"|"center"|"bottom"). These are passed through `_fmt_stmts` for single-cell writes, and added inline for row/column-wide writes.
+- `get_cell_formula` reads the `formula` property (read-only in the scripting dictionary); returns `None` when `formula is missing value`.
 - `get_sheet_as_table` backward-scans `row count`/`column count` to find the last non-empty row and column, then reads the block with the same collect-then-serialize pattern. Returns `""` from AppleScript for empty sheets; returns `"OVERLIMIT:R:C"` sentinel when the used range exceeds 2 000 cells (Python raises `ValueError`).
-- `sort_table` issues `sort table "…" by column N of table "…" direction ascending/descending` from within `tell sheet` — **not** inside `tell table`. Two non-obvious constraints: (1) the column reference must be scoped to the table (`column N of table "…"`) — bare `column N` in a `tell sheet` context is ambiguous; (2) the direction keyword is plain `direction`, not `in direction` — `in` would be parsed as the start of the `in rows` parameter name, causing a syntax error.
+- `sort_table` / `transpose_table` are issued from within `tell sheet` (not `tell table`) — both take the table as their direct parameter. For `sort_table`: the column reference must be scoped as `column N of table "…"` and the direction keyword is `direction`, not `in direction`.
+- `rename_table` uses the same two-loop sentinel pattern as `rename_sheet`: first scan for name conflicts, then rename.
+- `insert_row` / `remove_row` use `add row above row N` / `remove row N` within `tell table`. Similarly `insert_column` / `remove_column` use `add column before column N` / `remove column N`.
+- `merge_cells` / `unmerge_cells` / `clear_range` use `merge range "A1:C3"` / `unmerge range "A1:C3"` / `clear range "A1:C3"` within `tell table`. The `clear` command removes **both content and formatting**. Range addresses are built from `_col_letter(col) + str(row)`.
+- `transpose_table` uses `transpose table "…"` from within `tell sheet`. The SDEF `transpose` command takes a `table` as its direct parameter — it transposes the entire table, not a sub-range. Sub-range transpose is not supported by the scripting API.
+- `export_document` uses `export to POSIX file "…" as <format>` within `tell document`. SDEF format enum values: `Numbers 09` (.numbers), `PDF`, `Microsoft Excel` (.xlsx), `CSV`. The parent directory must exist; the file is overwritten if it exists.
+- `get_table_info` / `set_table_headers` read/write `header row count`, `header column count`, `footer row count` on the table object. Numbers allows 0–5 header rows, 0–1 header columns, 0–5 footer rows.
+- `get_table_layout` / `set_table_layout` read/write `position` (a 2-element list), `width`, and `height` on the table (iWork item properties). When only one of `x`/`y` is supplied to `set_table_layout`, the other coordinate is read first to avoid partial updates.
+- `set_table_locked` writes `locked` on the table object.
 - `add_sheet` / `delete_sheet` / `rename_sheet` use standard AppleScript `make` / `delete` / `set name of` on sheet objects. Each does an existence check inside the same osascript call (returning sentinel strings `"OK"` / `"EXISTS"` / `"NOT_FOUND"` / `"NEW_EXISTS"`) to avoid a separate round-trip. Numbers inserts new sheets after the currently active sheet regardless of the `at end of sheets` location specifier.
 - `delete_sheet` separates the existence-check loop from the `delete` call — using `delete sheet "name"` **after** the loop rather than `delete s` **inside** it. Deleting `s` while iterating `repeat with s in sheets` triggers AppleScript `-1728` ("Can't get item N of every sheet of document"). This applies to any destructive mutation of a collection mid-iteration in AppleScript.
 - `resize_table` sets `row count` and `column count` directly on the table object (`set row count to N`). New documents default to 4 columns — writing beyond the current boundary raises AppleScript `-10006`. Always call `resize_table` before `set_cell` / `set_range` when targeting columns 5+.
 - `get_column_width` / `set_column_width` use `width of column N` inside `tell table`. Similarly `get_row_height` / `set_row_height` use `height of row N`.
-- `get_cell_format` reads `font name`, `font size`, `alignment as text`, and `format as text` in a single osascript call, serialized with `"||"` delimiter. Bold/italic are derived by parsing the PostScript font-name suffix (same logic as `set_cell`). Alignment and number_format are returned as raw Numbers strings (e.g. `"left"`, `"automatic"`, `"number"`).
-- `set_row_format` / `set_column_format` — use `cell N of row R` (index-based, not address-based) for the inner loop, since the column/row count is queried at runtime. Both short-circuit immediately (no subprocess call) when all formatting params are None. Bold/italic uses the same two-step pattern as `set_range`: first query all font names in the row/column, compute new names in Python, then apply in a single osascript call. `_get_count_and_fonts` is a shared internal helper that returns `(count, [font_names])` in one round-trip.
-- `font_size` is now a parameter of `set_cell`, `set_range`, `set_row_format`, and `set_column_format`. Implemented via `set font size of cell "X" to N`. Also exposed via `_fmt_stmts`.
-- `duplicate_sheet` is **not implementable** — Numbers returns `"Sheets can not be copied" (-1717)` for any `duplicate`/`copy` operation on sheets, in both AppleScript and JXA.
+- `set_row_format` / `set_column_format` — use `cell N of row R` (index-based, not address-based) for the inner loop. Both short-circuit immediately (no subprocess call) when all formatting params are None. Bold/italic uses the same two-step pattern as `set_range`. `_get_count_and_fonts` is a shared internal helper that returns `(count, [font_names])` in one round-trip.
+
+**Not implementable via Numbers' AppleScript scripting dictionary:**
+- `duplicate_sheet` — Numbers returns `"Sheets can not be copied" (-1717)` for any `duplicate`/`copy` on sheets, in both AppleScript and JXA.
+- `decimal_places` / `currency_symbol` — not properties of the `range`/`cell` class in the scripting dictionary; accepted but silently ignored.
+- `date` number format — the `date and time` enum value collides with AppleScript's built-in `date` type and cannot be set via plain-text osascript.
+- Writing formulas — `formula` is a read-only property in the SDEF.
+- Sub-range transpose — `transpose` takes a table, not a range; the range object returns `-1708` for this verb.
+- Password management — `set password` / `remove password` are in the SDEF but excluded for security; there is no interactive confirmation mechanism.
+- Canvas objects (images, shapes, text boxes) — the iWork canvas model is out of scope for tabular data access.
+- Selection-based operations — `selection` is a UI-state property; it is unreliable in background automation and intentionally not exposed.
 
 ## Key constraints
 
