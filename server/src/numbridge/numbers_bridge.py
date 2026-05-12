@@ -420,6 +420,53 @@ def list_tables(document: str, sheet: str) -> list[str]:
     return _as_list(raw)
 
 
+def add_table(
+    document: str,
+    sheet: str,
+    name: str,
+    num_rows: int = 4,
+    num_columns: int = 4,
+) -> str:
+    """Add a new table to *sheet* in *document*.
+
+    Raises ValueError if *name* already exists in the sheet or if either
+    dimension is less than 1.
+    """
+    if num_rows < 1:
+        raise ValueError(f"num_rows must be >= 1; got {num_rows}")
+    if num_columns < 1:
+        raise ValueError(f"num_columns must be >= 1; got {num_columns}")
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(name)
+    # "row count"/"column count" conflict with AppleScript keywords in a
+    # `make ... with properties {}` record literal, so the table is created
+    # with just the name and resized via `set row count` / `set column count`
+    # inside a subsequent tell block.
+    # The make command is issued from within `tell sheet` so Numbers places
+    # the new table on the correct sheet without needing explicit activation.
+    result = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            repeat with t in tables\n'
+        f'                if name of t is "{tbl}" then return "EXISTS"\n'
+        f'            end repeat\n'
+        f'            set newTable to make new table with properties {{name:"{tbl}"}}\n'
+        f'            tell newTable\n'
+        f'                set row count to {num_rows}\n'
+        f'                set column count to {num_columns}\n'
+        f'            end tell\n'
+        f'        end tell\n'
+        f'        return "OK"\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    if result == "EXISTS":
+        raise ValueError(f"Table {name!r} already exists in sheet {sheet!r}")
+    return f"Table {name!r} added to sheet {sheet!r} ({num_rows} rows × {num_columns} columns)"
+
+
 def get_cell(document: str, sheet: str, table: str, row: int, column: int) -> str:
     """Return the displayed value of a cell as a string.
 

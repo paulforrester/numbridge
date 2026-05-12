@@ -138,6 +138,26 @@ def list_tables(document: str, sheet: str) -> list[str]:
 
 
 @mcp.tool()
+def add_table(
+    document: str,
+    sheet: str,
+    name: str,
+    num_rows: int = 4,
+    num_columns: int = 4,
+) -> str:
+    """Add a new blank table to a sheet in a Numbers document.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet to add the table to.
+        name: Name for the new table. Must not already exist in the sheet.
+        num_rows: Initial row count (default 4, minimum 1).
+        num_columns: Initial column count (default 4, minimum 1).
+    """
+    return numbers_bridge.add_table(document, sheet, name, num_rows, num_columns)
+
+
+@mcp.tool()
 def get_range(
     document: str,
     sheet: str,
