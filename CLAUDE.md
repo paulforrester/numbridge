@@ -87,41 +87,41 @@ uv run pytest
 | `create_document` | `(name=None) → str` | Create a new blank document; returns its actual name |
 | `list_documents` | `() → list[str]` | Names of all open Numbers documents |
 | `list_sheets` | `(document) → list[str]` | Sheet names in a document |
-| `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
-| `add_table` | `(document, sheet, name, num_rows=4, num_columns=4) → str` | Add a new blank table to a sheet; errors if name already exists in the sheet |
-| `get_cell` | `(document, sheet, table, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
-| `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
-| `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, font_size, text_color, background_color, text_wrap, vertical_alignment, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
-| `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, font_size, text_color, background_color, text_wrap, vertical_alignment, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
-| `resize_table` | `(document, sheet, table, num_rows, num_columns) → str` | Set row and column count; call before writing beyond the default 4-column boundary (-10006) |
-| `get_column_width` | `(document, sheet, table, column) → float` | Column width in points |
-| `set_column_width` | `(document, sheet, table, column, width) → str` | Set column width in points |
-| `get_row_height` | `(document, sheet, table, row) → float` | Row height in points |
-| `set_row_height` | `(document, sheet, table, row, height) → str` | Set row height in points |
-| `get_cell_format` | `(document, sheet, table, row, column) → dict` | Returns font_name, font_size, bold, italic, alignment, number_format, text_color ([r,g,b] or None), background_color ([r,g,b] or None), text_wrap, vertical_alignment |
-| `set_row_format` | `(document, sheet, table, row, *, bold, italic, alignment, number_format, font_size, text_color, background_color, text_wrap, vertical_alignment) → str` | Apply formatting to all cells in a row |
-| `set_column_format` | `(document, sheet, table, column, *, bold, italic, alignment, number_format, font_size, text_color, background_color, text_wrap, vertical_alignment) → str` | Apply formatting to all cells in a column |
-| `get_cell_formula` | `(document, sheet, table, row, column) → str \| None` | Formula string (e.g. `"=SUM(A1:A5)"`), or None if no formula. Read-only |
-| `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
 | `add_sheet` | `(document, sheet_name) → str` | Add a new blank sheet; errors if name already exists |
 | `delete_sheet` | `(document, sheet_name) → str` | Delete a sheet; errors if not found |
 | `rename_sheet` | `(document, old_name, new_name) → str` | Rename a sheet; no-op if names identical; errors if old missing or new taken |
+| `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
+| `add_table` | `(document, sheet, name, num_rows=4, num_columns=4) → str` | Add a new blank table to a sheet; errors if name already exists in the sheet |
 | `rename_table` | `(document, sheet, old_name, new_name) → str` | Rename a table within a sheet |
-| `get_sheet_as_table` | `(document, sheet, table) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
 | `get_table_info` | `(document, sheet, table) → dict` | Returns name, row_count, column_count, header_row_count, header_column_count, footer_row_count |
 | `set_table_headers` | `(document, sheet, table, *, header_rows, header_columns, footer_rows) → str` | Set number of header/footer rows and columns (all optional) |
 | `get_table_layout` | `(document, sheet, table) → dict` | Returns x, y (position in points), width, height on the canvas |
 | `set_table_layout` | `(document, sheet, table, *, x, y, width, height) → str` | Set position and/or size of the table on its canvas (all optional) |
 | `set_table_locked` | `(document, sheet, table, locked) → str` | Lock or unlock a table (locked tables can't be moved/resized) |
+| `resize_table` | `(document, sheet, table, num_rows, num_columns) → str` | Set row and column count; call before writing beyond the default 4-column boundary (-10006) |
 | `insert_row` | `(document, sheet, table, before_row) → str` | Insert a blank row before the given row; all rows below shift down |
 | `insert_column` | `(document, sheet, table, before_column) → str` | Insert a blank column before the given column |
 | `remove_row` | `(document, sheet, table, row) → str` | Remove a row; all rows below shift up |
 | `remove_column` | `(document, sheet, table, column) → str` | Remove a column; all columns to the right shift left |
+| `sort_table` | `(document, sheet, table, sort_column, ascending=True) → None` | Sort rows by column using Numbers' native sort |
+| `transpose_table` | `(document, sheet, table) → str` | Transpose the entire table (swap all rows and columns) |
+| `get_cell` | `(document, sheet, table, row, column) → str` | Single cell; `formatted value` so numbers/dates match the UI |
+| `get_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → list[list[str]]` | Rectangular block; max 1 000 cells |
+| `get_sheet_as_table` | `(document, sheet, table) → list[list[str]]` | Entire used range; auto-detects bounds; max 2 000 cells |
+| `get_cell_formula` | `(document, sheet, table, row, column) → str \| None` | Formula string (e.g. `"=SUM(A1:A5)"`), or None if no formula. Read-only |
+| `get_cell_format` | `(document, sheet, table, row, column) → dict` | Returns font_name, font_size, bold, italic, alignment, number_format, text_color ([r,g,b] or None), background_color ([r,g,b] or None), text_wrap, vertical_alignment |
+| `get_column_width` | `(document, sheet, table, column) → float` | Column width in points |
+| `get_row_height` | `(document, sheet, table, row) → float` | Row height in points |
+| `set_cell` | `(document, sheet, table, row, column, value, *, number_format, bold, italic, alignment, font_size, text_color, background_color, text_wrap, vertical_alignment, currency_symbol, decimal_places) → None` | Write one cell; `None`/`""` clears; all formatting params optional |
+| `set_range` | `(document, sheet, table, start_row, start_col, values, *, number_format, bold, italic, alignment, font_size, text_color, background_color, text_wrap, vertical_alignment, currency_symbol, decimal_places) → None` | Write a block; formatting applies to all cells; max 1 000 cells |
 | `merge_cells` | `(document, sheet, table, start_row, start_col, end_row, end_col) → str` | Merge a rectangular cell region; non-top-left content discarded |
 | `unmerge_cells` | `(document, sheet, table, start_row, start_col, end_row, end_col) → str` | Unmerge a merged region |
 | `clear_range` | `(document, sheet, table, start_row, start_col, end_row, end_col) → str` | Clear content AND formatting in a range (equivalent to Delete key) |
-| `transpose_table` | `(document, sheet, table) → str` | Transpose the entire table (swap all rows and columns) |
 | `export_document` | `(document, path, format="numbers") → str` | Export to `"numbers"` (.numbers), `"pdf"`, `"xlsx"`, or `"csv"` |
+| `set_row_format` | `(document, sheet, table, row, *, bold, italic, alignment, number_format, font_size, text_color, background_color, text_wrap, vertical_alignment) → str` | Apply formatting to all cells in a row |
+| `set_column_format` | `(document, sheet, table, column, *, bold, italic, alignment, number_format, font_size, text_color, background_color, text_wrap, vertical_alignment) → str` | Apply formatting to all cells in a column |
+| `set_column_width` | `(document, sheet, table, column, width) → str` | Set column width in points |
+| `set_row_height` | `(document, sheet, table, row, height) → str` | Set row height in points |
 
 All row/column indices are **1-based**. `set_range` generates one multi-statement AppleScript script so the entire write is a single `osascript` call.
 

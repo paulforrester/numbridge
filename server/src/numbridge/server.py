@@ -819,9 +819,10 @@ def clear_range(
     end_row: int,
     end_col: int,
 ) -> str:
-    """Clear the content of cells in a range without removing formatting.
+    """Clear the content and formatting of cells in a range.
 
     Equivalent to selecting the cells and pressing Delete in the Numbers UI.
+    Both cell values and formatting (colours, number format, etc.) are removed.
     Indices are 1-based.
 
     Args:
