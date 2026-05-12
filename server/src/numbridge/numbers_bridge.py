@@ -1339,6 +1339,39 @@ def get_cell_formula(
     return raw if raw else None
 
 
+def remove_table(document: str, sheet: str, table: str) -> str:
+    """Delete *table* from *sheet* in *document*.
+
+    Raises ValueError if the table does not exist.
+    Uses the same two-loop sentinel pattern as delete_sheet to avoid the
+    AppleScript -1728 mutation-while-iterating error.
+    """
+    doc = _q(document)
+    sht = _q(sheet)
+    tbl = _q(table)
+    result = _run(
+        f'tell application "Numbers"\n'
+        f'    tell document "{doc}"\n'
+        f'        tell sheet "{sht}"\n'
+        f'            set found to false\n'
+        f'            repeat with t in tables\n'
+        f'                if name of t is "{tbl}" then\n'
+        f'                    set found to true\n'
+        f'                    exit repeat\n'
+        f'                end if\n'
+        f'            end repeat\n'
+        f'            if not found then return "NOT_FOUND"\n'
+        f'            delete table "{tbl}"\n'
+        f'            return "OK"\n'
+        f'        end tell\n'
+        f'    end tell\n'
+        f'end tell'
+    )
+    if result == "NOT_FOUND":
+        raise ValueError(f"Table {table!r} not found in sheet {sheet!r}")
+    return f"Table {table!r} deleted from sheet {sheet!r}"
+
+
 def rename_table(document: str, sheet: str, old_name: str, new_name: str) -> str:
     """Rename a table in *sheet* from *old_name* to *new_name*.
 

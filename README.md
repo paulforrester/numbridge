@@ -72,6 +72,7 @@ Claude navigates Numbers documents through a four-level hierarchy: **document â†
 |------|-------------|
 | `list_tables` | Table names in a sheet |
 | `add_table` | Add a new blank table to a sheet (errors if the name is already taken) |
+| `remove_table` | Delete a table from a sheet (errors if the table doesn't exist) |
 | `rename_table` | Rename a table within a sheet |
 | `get_table_info` | Row/column counts and header/footer counts for a table |
 | `set_table_headers` | Set the number of header rows, header columns, and footer rows |

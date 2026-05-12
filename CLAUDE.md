@@ -92,6 +92,7 @@ uv run pytest
 | `rename_sheet` | `(document, old_name, new_name) → str` | Rename a sheet; no-op if names identical; errors if old missing or new taken |
 | `list_tables` | `(document, sheet) → list[str]` | Table names in a sheet |
 | `add_table` | `(document, sheet, name, num_rows=4, num_columns=4) → str` | Add a new blank table to a sheet; errors if name already exists in the sheet |
+| `remove_table` | `(document, sheet, table) → str` | Delete a table from a sheet; errors if not found |
 | `rename_table` | `(document, sheet, old_name, new_name) → str` | Rename a table within a sheet |
 | `get_table_info` | `(document, sheet, table) → dict` | Returns name, row_count, column_count, header_row_count, header_column_count, footer_row_count |
 | `set_table_headers` | `(document, sheet, table, *, header_rows, header_columns, footer_rows) → str` | Set number of header/footer rows and columns (all optional) |
@@ -152,6 +153,7 @@ All row/column indices are **1-based**. `set_range` generates one multi-statemen
 - `get_table_info` / `set_table_headers` read/write `header row count`, `header column count`, `footer row count` on the table object. Numbers allows 0–5 header rows, 0–1 header columns, 0–5 footer rows.
 - `get_table_layout` / `set_table_layout` read/write `position` (a 2-element list), `width`, and `height` on the table (iWork item properties). When only one of `x`/`y` is supplied to `set_table_layout`, the other coordinate is read first to avoid partial updates.
 - `set_table_locked` writes `locked` on the table object.
+- `remove_table` uses the same two-loop sentinel pattern as `delete_sheet`: existence check in one loop, then `delete table "…"` outside it. Deleting inside the iteration loop triggers AppleScript -1728.
 - `add_table` checks for name collisions with a sentinel loop inside `tell sheet`, then calls `make new table with properties {name:"…"}` in the same `tell sheet` block (Numbers respects the `tell sheet` scope for placement). `row count` / `column count` cannot be passed as properties in the `make` record literal — AppleScript parses them as keywords — so dimensions are set via `set row count to N` / `set column count to N` inside a `tell newTable` block immediately after creation. Returns sentinel `"EXISTS"` when the name is taken.
 - `add_sheet` / `delete_sheet` / `rename_sheet` use standard AppleScript `make` / `delete` / `set name of` on sheet objects. Each does an existence check inside the same osascript call (returning sentinel strings `"OK"` / `"EXISTS"` / `"NOT_FOUND"` / `"NEW_EXISTS"`) to avoid a separate round-trip. Numbers inserts new sheets after the currently active sheet regardless of the `at end of sheets` location specifier.
 - `delete_sheet` separates the existence-check loop from the `delete` call — using `delete sheet "name"` **after** the loop rather than `delete s` **inside** it. Deleting `s` while iterating `repeat with s in sheets` triggers AppleScript `-1728` ("Can't get item N of every sheet of document"). This applies to any destructive mutation of a collection mid-iteration in AppleScript.

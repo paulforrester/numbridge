@@ -579,6 +579,18 @@ def get_cell_formula(
 
 
 @mcp.tool()
+def remove_table(document: str, sheet: str, table: str) -> str:
+    """Delete a table from a sheet in a Numbers document.
+
+    Args:
+        document: Exact name of the open Numbers document.
+        sheet: Exact name of the sheet containing the table.
+        table: Exact name of the table to delete. Must exist in the sheet.
+    """
+    return numbers_bridge.remove_table(document, sheet, table)
+
+
+@mcp.tool()
 def rename_table(document: str, sheet: str, old_name: str, new_name: str) -> str:
     """Rename a table within a sheet.
 
