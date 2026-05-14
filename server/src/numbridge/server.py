@@ -68,22 +68,22 @@ def create_document(name: str | None = None) -> str:
 
 
 @mcp.tool()
-def list_documents() -> list[str]:
-    """Return the names of all currently open Numbers documents.
+def list_documents() -> str:
+    """Return the names of all currently open Numbers documents, one per line.
 
-    Numbers must be running; returns an empty list if no documents are open.
+    Numbers must be running; returns an empty string if no documents are open.
     """
-    return numbers_bridge.list_documents()
+    return "\n".join(numbers_bridge.list_documents())
 
 
 @mcp.tool()
-def list_sheets(document: str) -> list[str]:
-    """Return the names of all sheets in a Numbers document.
+def list_sheets(document: str) -> str:
+    """Return the names of all sheets in a Numbers document, one per line.
 
     Args:
         document: Exact name of the open Numbers document (e.g. "Budget 2025").
     """
-    return numbers_bridge.list_sheets(document)
+    return "\n".join(numbers_bridge.list_sheets(document))
 
 
 @mcp.tool()
@@ -123,8 +123,8 @@ def rename_sheet(document: str, old_name: str, new_name: str) -> str:
 
 
 @mcp.tool()
-def list_tables(document: str, sheet: str) -> list[str]:
-    """Return the names of all tables in a sheet.
+def list_tables(document: str, sheet: str) -> str:
+    """Return the names of all tables in a sheet, one per line.
 
     Numbers sheets can contain multiple tables. Use the returned names when
     calling get_cell, get_range, set_cell, set_range, or get_sheet_as_table
@@ -134,7 +134,7 @@ def list_tables(document: str, sheet: str) -> list[str]:
         document: Exact name of the open Numbers document.
         sheet: Exact name of the sheet.
     """
-    return numbers_bridge.list_tables(document, sheet)
+    return "\n".join(numbers_bridge.list_tables(document, sheet))
 
 
 @mcp.tool()
